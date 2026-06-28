@@ -636,6 +636,54 @@ select option{background:var(--surface);color:var(--text)}
   </div>
 </div>
 
+<!-- ═══ EDIT TRADE MODAL ═══ -->
+<div id="edit-modal" class="overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-hd">
+      <span>Edit trade</span>
+      <button class="x-btn" onclick="closeEditModal()">×</button>
+    </div>
+    <input type="hidden" id="edit-trade-id">
+    <div class="g2">
+      <div><label>Date</label><input type="date" id="edit-date"></div>
+      <div><label>Entry time</label><input type="time" id="edit-time"></div>
+    </div>
+    <div class="g2">
+      <div><label>Pair</label>
+        <select id="edit-pair"><option>NQ</option><option>MNQ</option><option>ES</option><option>MES</option><option>Other</option></select>
+      </div>
+      <div><label>Direction</label>
+        <select id="edit-dir"><option>Long</option><option>Short</option></select>
+      </div>
+    </div>
+    <div><label>Bias</label>
+      <select id="edit-bias"><option>Long</option><option>Short</option><option>Neutral</option></select>
+    </div>
+    <div class="g3">
+      <div><label>P&L ($)</label><input type="number" id="edit-pnl"></div>
+      <div><label>Risk ($)</label><input type="number" id="edit-risk"></div>
+      <div><label>RR</label><input type="number" id="edit-rr" step="0.1"></div>
+    </div>
+    <div class="g2">
+      <div><label>Outcome</label>
+        <select id="edit-outcome"><option>Win</option><option>Loss</option><option>Breakeven</option></select>
+      </div>
+      <div><label>Take again?</label>
+        <select id="edit-takeagain"><option>Yes</option><option>No</option><option>Maybe</option></select>
+      </div>
+    </div>
+    <div><label>Confluences</label><input type="text" id="edit-conf"></div>
+    <div><label>Emotions</label><input type="text" id="edit-emotion"></div>
+    <div><label>Draw on Liquidity</label><input type="text" id="edit-dol"></div>
+    <div><label>Notes</label><textarea id="edit-notes"></textarea></div>
+    <div><label>Reflection</label><textarea id="edit-reflection"></textarea></div>
+    <div class="btn-row">
+      <button class="btn pri" onclick="saveEditTrade()">Save changes</button>
+      <button class="btn" onclick="closeEditModal()">Cancel</button>
+    </div>
+    <div id="edit-save-msg" style="display:none;margin-top:.75rem;font-size:13px;color:var(--green)">Changes saved</div>
+  </div>
+</div>
 </main>
 </div>
 
@@ -885,6 +933,8 @@ function renderDayPanel(ds){
         <div style="display:flex;gap:8px;align-items:center">
           <span class="badge ${t.outcome==='Win'?'win':t.outcome==='Loss'?'loss':'be'}">${t.outcome}</span>
           <span style="font-size:16px;font-weight:700;color:${(t.pnl||0)>=0?'var(--green)':'var(--red)'}">${t.pnl!=null?(t.pnl>=0?'+':'')+'\$'+t.pnl:'—'}</span>
+          <button onclick="openEditTrade(${t.id})" style="background:var(--card2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;transition:.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Edit</button>
+          <button onclick="deleteTrade(${t.id},'${ds}')" style="background:var(--red-bg);border:1px solid transparent;color:var(--red);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;font-family:inherit;font-weight:500;transition:.15s" onmouseover="this.style.borderColor='var(--red)'" onmouseout="this.style.borderColor='transparent'">Delete</button>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:8px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-bottom:8px">
@@ -1959,6 +2009,75 @@ function prefillCalForm(ds){
   if(el) el.scrollIntoView({behavior:'smooth',block:'center'});
 }
 // ── END CALENDAR FORM ─────────────────────────────────────
+
+// ── EDIT / DELETE TRADE ───────────────────────────────────
+function openEditTrade(id){
+  const t=trades.find(t=>t.id===id);
+  if(!t)return;
+  document.getElementById('edit-trade-id').value=id;
+  document.getElementById('edit-date').value=t.date||'';
+  document.getElementById('edit-time').value=t.time||'';
+  document.getElementById('edit-pair').value=t.pair||'NQ';
+  document.getElementById('edit-dir').value=t.dir||'Long';
+  document.getElementById('edit-bias').value=t.bias||'Long';
+  document.getElementById('edit-pnl').value=t.pnl!=null?t.pnl:'';
+  document.getElementById('edit-risk').value=t.risk!=null?t.risk:'';
+  document.getElementById('edit-rr').value=t.rr!=null?t.rr:'';
+  document.getElementById('edit-outcome').value=t.outcome||'Win';
+  document.getElementById('edit-takeagain').value=t.takeAgain||'Yes';
+  document.getElementById('edit-conf').value=t.confluences||'';
+  document.getElementById('edit-emotion').value=t.emotion||'';
+  document.getElementById('edit-dol').value=t.dol||'';
+  document.getElementById('edit-notes').value=t.notes||'';
+  document.getElementById('edit-reflection').value=t.reflection||'';
+  document.getElementById('edit-save-msg').style.display='none';
+  document.getElementById('edit-modal').classList.add('open');
+}
+
+function closeEditModal(){
+  document.getElementById('edit-modal').classList.remove('open');
+}
+
+function saveEditTrade(){
+  const id=parseInt(document.getElementById('edit-trade-id').value);
+  const idx=trades.findIndex(t=>t.id===id);
+  if(idx<0)return;
+  trades[idx]={
+    ...trades[idx],
+    date:document.getElementById('edit-date').value,
+    time:document.getElementById('edit-time').value||null,
+    pair:document.getElementById('edit-pair').value,
+    dir:document.getElementById('edit-dir').value,
+    bias:document.getElementById('edit-bias').value,
+    pnl:parseFloat(document.getElementById('edit-pnl').value)||null,
+    risk:parseFloat(document.getElementById('edit-risk').value)||null,
+    rr:parseFloat(document.getElementById('edit-rr').value)||null,
+    outcome:document.getElementById('edit-outcome').value,
+    takeAgain:document.getElementById('edit-takeagain').value,
+    confluences:document.getElementById('edit-conf').value,
+    emotion:document.getElementById('edit-emotion').value,
+    dol:document.getElementById('edit-dol').value,
+    notes:document.getElementById('edit-notes').value,
+    reflection:document.getElementById('edit-reflection').value,
+  };
+  persist();
+  renderDash();
+  renderCalendar();
+  if(activeDateStr) renderDayPanel(activeDateStr);
+  const msg=document.getElementById('edit-save-msg');
+  msg.style.display='block';
+  setTimeout(()=>{msg.style.display='none';closeEditModal();},1200);
+}
+
+function deleteTrade(id, ds){
+  if(!confirm('Delete this trade? This cannot be undone.')) return;
+  trades=trades.filter(t=>t.id!==id);
+  persist();
+  renderDash();
+  renderCalendar();
+  if(activeDateStr) renderDayPanel(activeDateStr);
+}
+// ── END EDIT / DELETE ─────────────────────────────────────
 
 // Apply saved theme on load
 (function(){const t=localStorage.getItem('tz_theme')||'dark';if(t==='light')applyTheme('light');})();
