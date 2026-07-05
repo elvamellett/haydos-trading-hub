@@ -269,6 +269,11 @@ select option{background:var(--surface);color:var(--text)}
       <div class="toggle-track" id="theme-track"><div class="toggle-thumb"></div></div>
       <span id="theme-label">Dark mode</span>
     </div>
+    <div style="margin-top:.6rem;display:flex;gap:6px">
+      <button class="btn" style="font-size:11px;padding:4px 10px" onclick="exportBackup()" title="Download all data as a backup file">Backup</button>
+      <button class="btn" style="font-size:11px;padding:4px 10px" onclick="document.getElementById('restore-file').click()" title="Restore data from a backup file">Restore</button>
+      <input type="file" id="restore-file" accept=".json,application/json" style="display:none" onchange="importBackup(event)">
+    </div>
     <div style="margin-top:.5rem;font-size:11px;color:var(--muted)" id="sb-date"></div>
   </div>
 </aside>
@@ -396,11 +401,19 @@ select option{background:var(--surface);color:var(--text)}
     <!-- RIGHT: no-trade log + screenshot -->
     <div>
       <div class="card">
-        <div class="ct">Screenshot</div>
+        <div class="ct">Trade screenshot</div>
         <div class="ss-strip" id="log-ss-strip"><div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div></div>
         <label class="ss-upload-btn" style="margin-top:0"> Attach screenshot<input type="file" id="log-ss-input" accept="image/*" style="display:none" onchange="attachLogScreenshot(event)">
         </label>
         <div id="log-ss-preview" style="margin-top:.75rem"></div>
+      </div>
+      <div class="card">
+        <div class="ct">Outlook screenshot</div>
+        <div class="ss-strip" id="log-oss-strip"><div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div></div>
+        <label class="ss-upload-btn" style="margin-top:0"> Attach screenshot<input type="file" id="log-oss-input" accept="image/*" style="display:none" onchange="attachLogOutlookScreenshot(event)">
+        </label>
+        <div id="log-oss-preview" style="margin-top:.75rem"></div>
+        <div><label>Outlook notes</label><textarea id="t-outlook-notes" style="min-height:48px" placeholder="What was the outlook / picture for this trade?"></textarea></div>
       </div>
       <div class="card">
         <div class="ct">Did not trade today?</div>
@@ -521,11 +534,19 @@ select option{background:var(--surface);color:var(--text)}
       </div>
       <div>
         <div class="card">
-          <div class="ct">Screenshot</div>
+          <div class="ct">Trade screenshot</div>
           <div class="ss-strip" id="cal-log-ss-strip"><div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div></div>
           <label class="ss-upload-btn" style="margin-top:0"> Attach screenshot<input type="file" id="cal-log-ss-input" accept="image/*" style="display:none" onchange="attachCalScreenshot(event)">
           </label>
           <div id="cal-log-ss-preview" style="margin-top:.75rem"></div>
+        </div>
+        <div class="card">
+          <div class="ct">Outlook screenshot</div>
+          <div class="ss-strip" id="cal-log-oss-strip"><div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div></div>
+          <label class="ss-upload-btn" style="margin-top:0"> Attach screenshot<input type="file" id="cal-log-oss-input" accept="image/*" style="display:none" onchange="attachCalOutlookScreenshot(event)">
+          </label>
+          <div id="cal-log-oss-preview" style="margin-top:.75rem"></div>
+          <div><label>Outlook notes</label><textarea id="cal-t-outlook-notes" style="min-height:48px" placeholder="What was the outlook / picture for this trade?"></textarea></div>
         </div>
         <div class="card">
           <div class="ct">Did not trade today?</div>
@@ -677,6 +698,7 @@ select option{background:var(--surface);color:var(--text)}
     <div><label>Draw on Liquidity</label><input type="text" id="edit-dol"></div>
     <div><label>Notes</label><textarea id="edit-notes"></textarea></div>
     <div><label>Reflection</label><textarea id="edit-reflection"></textarea></div>
+    <div><label>Outlook notes</label><textarea id="edit-outlook-notes"></textarea></div>
     <div class="btn-row">
       <button class="btn pri" onclick="saveEditTrade()">Save changes</button>
       <button class="btn" onclick="closeEditModal()">Cancel</button>
@@ -711,19 +733,107 @@ function toggleTheme(){
   applyTheme(current==='dark'?'light':'dark');
 }
 // ── END THEME ──────────────────────────────────────────────
-let trades = JSON.parse(localStorage.getItem('nq_trades')||'[]');
-let journals = JSON.parse(localStorage.getItem('nq_journals')||'[]');
-let noTrades = JSON.parse(localStorage.getItem('nq_notrades')||'[]');
+// Data lives in IndexedDB (effectively unlimited) rather than localStorage,
+// whose ~5MB quota fills up fast once screenshots are attached. Older
+// localStorage data is migrated across automatically on first load.
+let trades = [];
+let journals = [];
+let noTrades = [];
+let idb = null;
 let logView = 'gallery';
 let calYear = new Date().getFullYear();
 let calMonth = new Date().getMonth();
 let activeDateStr = '';
 let pendingScreenshot = null;
+let pendingOutlookScreenshot = null;
+
+function loadStored(key){
+  try{ return JSON.parse(localStorage.getItem(key)||'null'); }
+  catch(e){ return null; }
+}
+function openDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open('haydos-hub',1);
+    req.onupgradeneeded=()=>{ req.result.createObjectStore('kv'); };
+    req.onsuccess=()=>res(req.result);
+    req.onerror=()=>rej(req.error);
+  });
+}
+function idbGet(key){
+  return new Promise((res,rej)=>{
+    const req=idb.transaction('kv').objectStore('kv').get(key);
+    req.onsuccess=()=>res(req.result===undefined?null:req.result);
+    req.onerror=()=>rej(req.error);
+  });
+}
+function idbSet(key,val){
+  return new Promise((res,rej)=>{
+    const tx=idb.transaction('kv','readwrite');
+    tx.objectStore('kv').put(val,key);
+    tx.oncomplete=()=>res();
+    tx.onerror=()=>rej(tx.error);
+  });
+}
 
 function persist(){
-  localStorage.setItem('nq_trades', JSON.stringify(trades));
-  localStorage.setItem('nq_journals', JSON.stringify(journals));
-  localStorage.setItem('nq_notrades', JSON.stringify(noTrades));
+  try{ localStorage.setItem('nq_seeded','1'); }catch(e){}
+  if(idb){
+    Promise.all([
+      idbSet('nq_trades',trades),
+      idbSet('nq_journals',journals),
+      idbSet('nq_notrades',noTrades)
+    ]).then(hideStorageWarning).catch(showStorageWarning);
+    return true;
+  }
+  // IndexedDB unavailable (private mode etc) — fall back to localStorage
+  try{
+    localStorage.setItem('nq_trades', JSON.stringify(trades));
+    localStorage.setItem('nq_journals', JSON.stringify(journals));
+    localStorage.setItem('nq_notrades', JSON.stringify(noTrades));
+    hideStorageWarning();
+    return true;
+  }catch(err){
+    showStorageWarning();
+    return false;
+  }
+}
+
+function showStorageWarning(){
+  let el=document.getElementById('storage-warning');
+  if(!el){
+    el=document.createElement('div');
+    el.id='storage-warning';
+    el.style.cssText='position:fixed;bottom:16px;right:16px;z-index:9999;max-width:380px;background:#3d1d1f;border:1px solid #f85149;color:#ffb3ad;padding:12px 16px;border-radius:8px;font-size:13px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.5)';
+    document.body.appendChild(el);
+  }
+  el.innerHTML='<strong style="color:#f85149">Save failed — latest changes NOT saved.</strong><br>Your browser blocked saving (storage may be full), so the last change will be lost if you refresh. Use the Backup button in the sidebar to save your data to a file, free up space, then save again.';
+  el.style.display='block';
+}
+function hideStorageWarning(){
+  const el=document.getElementById('storage-warning');
+  if(el) el.style.display='none';
+}
+
+// Screenshots are stored as base64 inside localStorage (~5MB quota for the whole
+// app), so full-resolution captures must be downscaled before they are kept.
+function compressDataUrl(dataUrl, cb){
+  const img=new Image();
+  img.onload=function(){
+    const MAX=1400;
+    let w=img.width, h=img.height;
+    if(w>MAX||h>MAX){ const s=MAX/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+    const c=document.createElement('canvas');
+    c.width=w; c.height=h;
+    c.getContext('2d').drawImage(img,0,0,w,h);
+    cb(c.toDataURL('image/jpeg',0.72));
+  };
+  img.onerror=function(){ cb(dataUrl); };
+  img.src=dataUrl;
+}
+function compressImageFile(file, cb){
+  const reader=new FileReader();
+  reader.onload=function(ev){ compressDataUrl(ev.target.result, cb); };
+  reader.readAsDataURL(file);
 }
 
 const today = new Date();
@@ -758,23 +868,34 @@ function show(page, el){
 function clearTradeForm(){
   document.getElementById('t-date').value = todayStr;
   document.getElementById('t-time').value = String(new Date().getHours()).padStart(2,'0')+':'+String(new Date().getMinutes()).padStart(2,'0');
-  ['t-pnl','t-risk','t-rr','t-conf','t-emotion','t-notes','t-dol','t-reflection'].forEach(id=>document.getElementById(id).value='');
+  ['t-pnl','t-risk','t-rr','t-conf','t-emotion','t-notes','t-dol','t-reflection','t-outlook-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('t-outcome').selectedIndex=0;
   document.getElementById('t-takeagain').value='Yes';
   pendingScreenshot=null;
   document.getElementById('log-ss-strip').innerHTML='<div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div>';
   document.getElementById('log-ss-preview').innerHTML='';
+  pendingOutlookScreenshot=null;
+  document.getElementById('log-oss-strip').innerHTML='<div style="font-size:12px;color:var(--subtle)">No screenshot attached.</div>';
+  document.getElementById('log-oss-preview').innerHTML='';
 }
 
 function attachLogScreenshot(e){
   const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    pendingScreenshot=ev.target.result;
+  compressImageFile(file,function(dataUrl){
+    pendingScreenshot=dataUrl;
     document.getElementById('log-ss-strip').innerHTML='';
-    document.getElementById('log-ss-preview').innerHTML=`<img src="${ev.target.result}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">`;
-  };
-  reader.readAsDataURL(file);
+    document.getElementById('log-ss-preview').innerHTML=`<img src="${dataUrl}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">`;
+  });
+  e.target.value='';
+}
+
+function attachLogOutlookScreenshot(e){
+  const file=e.target.files[0]; if(!file) return;
+  compressImageFile(file,function(dataUrl){
+    pendingOutlookScreenshot=dataUrl;
+    document.getElementById('log-oss-strip').innerHTML='';
+    document.getElementById('log-oss-preview').innerHTML=`<img src="${dataUrl}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">`;
+  });
   e.target.value='';
 }
 
@@ -797,7 +918,9 @@ function saveTrade(){
     takeAgain:document.getElementById('t-takeagain').value,
     dol:document.getElementById('t-dol').value,
     reflection:document.getElementById('t-reflection').value,
-    screenshot:pendingScreenshot
+    screenshot:pendingScreenshot,
+    outlookScreenshot:pendingOutlookScreenshot,
+    outlookNotes:document.getElementById('t-outlook-notes').value
   };
   trades.unshift(t); persist(); renderDash();
   clearTradeForm();
@@ -832,11 +955,13 @@ function showTradeDetail(id){
     ['Risk',t.risk?'$'+t.risk:'—'],['RR',t.rr||'—'],
     ['Confluences',t.confluences||'—'],['Emotions',t.emotion||'—'],['Notes',t.notes||'—'],
     ['Take again?',`<span class="badge ${(t.takeAgain||'').toLowerCase()}">${t.takeAgain||'—'}</span>`],
-    ['Reflection',t.reflection||'—']
+    ['Reflection',t.reflection||'—'],
+    ['Outlook notes',t.outlookNotes||'—']
   ];
   document.getElementById('detail-body').innerHTML=
     rows.map(([l,v])=>`<div class="detail-row"><span class="detail-lbl">${l}</span><span style="text-align:right;max-width:65%">${v}</span></div>`).join('')
-    +(t.screenshot?`<div style="margin-top:1rem"><img src="${t.screenshot}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"></div>`:'');
+    +(t.screenshot?`<div style="margin-top:1rem"><div style="font-size:10px;color:#7d8590;text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:4px">Trade screenshot</div><img src="${t.screenshot}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"></div>`:'')
+    +(t.outlookScreenshot?`<div style="margin-top:1rem"><div style="font-size:10px;color:#7d8590;text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:4px">Outlook screenshot</div><img src="${t.outlookScreenshot}" style="width:100%;border-radius:var(--radius);border:1px solid var(--border)"></div>`:'');
   document.getElementById('detail-overlay').classList.add('open');
 }
 document.getElementById('detail-overlay').onclick=function(e){if(e.target===this)this.classList.remove('open');};
@@ -949,7 +1074,9 @@ function renderDayPanel(ds){
       ${t.dol?'<div style="font-size:12px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Draw on Liquidity</span><div style="margin-top:2px">'+t.dol+'</div></div>':''}
       ${t.notes?'<div style="font-size:12px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Notes</span><div style="margin-top:2px;color:var(--muted);font-style:italic">'+t.notes+'</div></div>':''}
       ${t.reflection?'<div style="font-size:12px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Reflection</span><div style="margin-top:2px;color:var(--blue)">'+t.reflection+'</div></div>':''}
-      ${t.screenshot?'<img src="'+t.screenshot+'" style="width:100%;border-radius:6px;margin-top:6px;border:1px solid var(--border)">':''}
+      ${t.outlookNotes?'<div style="font-size:12px;margin-bottom:6px"><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600">Outlook notes</span><div style="margin-top:2px">'+t.outlookNotes+'</div></div>':''}
+      ${t.screenshot?'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-top:6px">Trade screenshot</div><img src="'+t.screenshot+'" style="width:100%;border-radius:6px;margin-top:4px;border:1px solid var(--border)">':''}
+      ${t.outlookScreenshot?'<div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-top:6px">Outlook screenshot</div><img src="'+t.outlookScreenshot+'" style="width:100%;border-radius:6px;margin-top:4px;border:1px solid var(--border)">':''}
     </div>`).join('');
   }
   tEl.innerHTML=html;
@@ -964,21 +1091,19 @@ function uploadDayScreenshots(e){
   if(!files.length||!activeDateStr)return;
   let done=0;
   files.forEach(file=>{
-    const reader=new FileReader();
-    reader.onload=function(ev){
+    compressImageFile(file,function(dataUrl){
       const dayTrades=trades.filter(t=>t.date===activeDateStr);
       const unattached=dayTrades.find(t=>!t.screenshot);
-      if(unattached){unattached.screenshot=ev.target.result;}
+      if(unattached){unattached.screenshot=dataUrl;}
       else{
         let dj=journals.find(j=>j.date===activeDateStr);
         if(!dj){dj={date:activeDateStr,mood:'',why:'',worked:'',didnt:'',mistakes:'',tomorrow:'',screenshots:[]};journals.unshift(dj);}
         if(!dj.screenshots)dj.screenshots=[];
-        dj.screenshots.push(ev.target.result);
+        dj.screenshots.push(dataUrl);
       }
       done++;
       if(done===files.length){persist();renderDayScreenshots(activeDateStr);}
-    };
-    reader.readAsDataURL(file);
+    });
   });
   e.target.value='';
 }
@@ -986,9 +1111,10 @@ function uploadDayScreenshots(e){
 function renderDayScreenshots(ds){
   const list=document.getElementById('day-ss-list');
   const tradeSS=trades.filter(t=>t.date===ds&&t.screenshot).map(t=>({src:t.screenshot,label:t.pair||'Trade'}));
+  const outlookSS=trades.filter(t=>t.date===ds&&t.outlookScreenshot).map(t=>({src:t.outlookScreenshot,label:'Outlook'}));
   const dj=journals.find(j=>j.date===ds);
   const jSS=(dj&&dj.screenshots||[]).map(s=>({src:s,label:'Chart'}));
-  const all=[...tradeSS,...jSS];
+  const all=[...tradeSS,...outlookSS,...jSS];
   if(!all.length){list.innerHTML='<div style="font-size:12px;color:var(--subtle)">No screenshots yet.</div>';return;}
   list.innerHTML=all.map(s=>`<div class="ss-thumb"><img src="${s.src}" onclick="expandImg('${encodeURIComponent(s.src)}','${s.label}')" title="Click to expand"><div class="ss-thumb-lbl">${s.label}</div></div>`).join('');
 }
@@ -1832,7 +1958,11 @@ function shiftMonthView(dir){
 
 
 // ── SEED DATA ─────────────────────────────────────────────
-if(!trades.length&&!journals.length){
+// Only ever seed on a genuine first run. Once anything has been saved the
+// nq_seeded flag is set, so demo data can never overwrite or resurrect over
+// real entries (e.g. after a failed save or if all trades are deleted).
+function seedIfFirstRun(){
+if(!trades.length&&!journals.length&&!localStorage.getItem('nq_seeded')){
   trades=[
     // ── June 2026 ──
     {id:1000,date:'2026-06-02',time:'09:35',outcome:'Win',pair:'NQ',dir:'Long',bias:'Long',pnl:750,risk:250,rr:3.0,confluences:'VWAP reclaim + prior day high + volume spike',emotion:'Calm',dol:'Buy-side above 19280',notes:'Perfect setup. Waited for the break, confirmed with volume. Held to target.',takeAgain:'Yes',reflection:'Patience paid off. This is the setup I trade best.',screenshot:null},
@@ -1888,6 +2018,30 @@ if(!trades.length&&!journals.length){
   ];
   persist();
 }
+}
+
+// One-time cleanup: full-resolution screenshots saved by older versions can
+// fill the storage quota, which makes every later save fail silently.
+// Recompress anything oversized already in storage, then re-save.
+function migrateOversizedScreenshots(){
+  const LIMIT=400000; // ~300KB of image per base64 string
+  const jobs=[];
+  trades.forEach(t=>{
+    if(t.screenshot&&t.screenshot.length>LIMIT)
+      jobs.push(done=>compressDataUrl(t.screenshot,d=>{t.screenshot=d;done();}));
+    if(t.outlookScreenshot&&t.outlookScreenshot.length>LIMIT)
+      jobs.push(done=>compressDataUrl(t.outlookScreenshot,d=>{t.outlookScreenshot=d;done();}));
+  });
+  journals.forEach(j=>{
+    (j.screenshots||[]).forEach((s,i)=>{
+      if(s&&s.length>LIMIT)
+        jobs.push(done=>compressDataUrl(s,d=>{j.screenshots[i]=d;done();}));
+    });
+  });
+  if(!jobs.length)return;
+  let done=0;
+  jobs.forEach(job=>job(()=>{ done++; if(done===jobs.length)persist(); }));
+}
 
 
 // ── MOOD ──────────────────────────────────────────────────
@@ -1930,6 +2084,7 @@ async function aiCoach(){
 
 // ── CALENDAR EMBEDDED FORM ────────────────────────────────
 let calPendingScreenshot=null;
+let calPendingOutlookScreenshot=null;
 
 function initCalTradeForm(){
   document.getElementById('cal-t-date').value=todayStr;
@@ -1942,23 +2097,34 @@ function clearCalTradeForm(){
   document.getElementById('cal-t-date').value=todayStr;
   const now=new Date();
   document.getElementById('cal-t-time').value=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
-  ['cal-t-pnl','cal-t-risk','cal-t-rr','cal-t-conf','cal-t-emotion','cal-t-notes','cal-t-dol','cal-t-reflection'].forEach(id=>document.getElementById(id).value='');
+  ['cal-t-pnl','cal-t-risk','cal-t-rr','cal-t-conf','cal-t-emotion','cal-t-notes','cal-t-dol','cal-t-reflection','cal-t-outlook-notes'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('cal-t-outcome').selectedIndex=0;
   document.getElementById('cal-t-takeagain').value='Yes';
   calPendingScreenshot=null;
   document.getElementById('cal-log-ss-strip').innerHTML='<div style="font-size:12px;color:var(--muted)">No screenshot attached.</div>';
   document.getElementById('cal-log-ss-preview').innerHTML='';
+  calPendingOutlookScreenshot=null;
+  document.getElementById('cal-log-oss-strip').innerHTML='<div style="font-size:12px;color:var(--muted)">No screenshot attached.</div>';
+  document.getElementById('cal-log-oss-preview').innerHTML='';
 }
 
 function attachCalScreenshot(e){
   const file=e.target.files[0]; if(!file) return;
-  const reader=new FileReader();
-  reader.onload=function(ev){
-    calPendingScreenshot=ev.target.result;
+  compressImageFile(file,function(dataUrl){
+    calPendingScreenshot=dataUrl;
     document.getElementById('cal-log-ss-strip').innerHTML='';
-    document.getElementById('cal-log-ss-preview').innerHTML='<img src="'+ev.target.result+'" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">';
-  };
-  reader.readAsDataURL(file);
+    document.getElementById('cal-log-ss-preview').innerHTML='<img src="'+dataUrl+'" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">';
+  });
+  e.target.value='';
+}
+
+function attachCalOutlookScreenshot(e){
+  const file=e.target.files[0]; if(!file) return;
+  compressImageFile(file,function(dataUrl){
+    calPendingOutlookScreenshot=dataUrl;
+    document.getElementById('cal-log-oss-strip').innerHTML='';
+    document.getElementById('cal-log-oss-preview').innerHTML='<img src="'+dataUrl+'" style="width:100%;border-radius:var(--radius);border:1px solid var(--border);margin-top:4px">';
+  });
   e.target.value='';
 }
 
@@ -1981,7 +2147,9 @@ function saveCalTrade(){
     dol:document.getElementById('cal-t-dol').value,
     takeAgain:document.getElementById('cal-t-takeagain').value,
     reflection:document.getElementById('cal-t-reflection').value,
-    screenshot:calPendingScreenshot
+    screenshot:calPendingScreenshot,
+    outlookScreenshot:calPendingOutlookScreenshot,
+    outlookNotes:document.getElementById('cal-t-outlook-notes').value
   };
   trades.unshift(t); persist(); renderDash(); renderCalendar();
   if(activeDateStr===date) renderDayPanel(date);
@@ -2030,6 +2198,7 @@ function openEditTrade(id){
   document.getElementById('edit-dol').value=t.dol||'';
   document.getElementById('edit-notes').value=t.notes||'';
   document.getElementById('edit-reflection').value=t.reflection||'';
+  document.getElementById('edit-outlook-notes').value=t.outlookNotes||'';
   document.getElementById('edit-save-msg').style.display='none';
   document.getElementById('edit-modal').classList.add('open');
 }
@@ -2059,6 +2228,7 @@ function saveEditTrade(){
     dol:document.getElementById('edit-dol').value,
     notes:document.getElementById('edit-notes').value,
     reflection:document.getElementById('edit-reflection').value,
+    outlookNotes:document.getElementById('edit-outlook-notes').value,
   };
   persist();
   renderDash();
@@ -2078,6 +2248,60 @@ function deleteTrade(id, ds){
   if(activeDateStr) renderDayPanel(activeDateStr);
 }
 // ── END EDIT / DELETE ─────────────────────────────────────
+
+// ── BACKUP / RESTORE ──────────────────────────────────────
+function exportBackup(){
+  const payload={app:'haydos-trading-hub',version:1,exportedAt:new Date().toISOString(),trades,journals,noTrades};
+  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='haydos-backup-'+todayStr+'.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function importBackup(e){
+  const file=e.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(!Array.isArray(data.trades)||!Array.isArray(data.journals)||!Array.isArray(data.noTrades)) throw new Error('invalid');
+      const when=data.exportedAt?new Date(data.exportedAt).toLocaleString():'unknown date';
+      if(!confirm('Restore backup from '+when+'?\nThis replaces ALL current data with '+data.trades.length+' trades, '+data.journals.length+' journals and '+data.noTrades.length+' no-trade days.')) return;
+      trades=data.trades; journals=data.journals; noTrades=data.noTrades;
+      persist();
+      renderDash(); renderCalendar();
+      if(activeDateStr) renderDayPanel(activeDateStr);
+      alert('Backup restored: '+trades.length+' trades.');
+    }catch(err){
+      alert('Could not read that file. Make sure it is a Haydos Trading Hub backup (.json).');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+}
+
+// ── INIT ──────────────────────────────────────────────────
+// Load data (async, from IndexedDB), then seed/migrate and render the
+// dashboard. Rendering here also fixes the dashboard showing zeros on
+// refresh until a nav item was clicked.
+(async function initData(){
+  try{ idb=await openDB(); }catch(e){ idb=null; }
+  let t=null,j=null,n=null;
+  if(idb){
+    try{ [t,j,n]=await Promise.all([idbGet('nq_trades'),idbGet('nq_journals'),idbGet('nq_notrades')]); }
+    catch(e){}
+  }
+  if(t===null&&j===null&&n===null){
+    // nothing in IndexedDB yet — pick up data saved by the old localStorage version
+    t=loadStored('nq_trades'); j=loadStored('nq_journals'); n=loadStored('nq_notrades');
+  }
+  trades=t||[]; journals=j||[]; noTrades=n||[];
+  seedIfFirstRun();
+  migrateOversizedScreenshots();
+  persist();
+  renderDash();
+})();
 
 // Apply saved theme on load
 (function(){const t=localStorage.getItem('tz_theme')||'dark';if(t==='light')applyTheme('light');})();
