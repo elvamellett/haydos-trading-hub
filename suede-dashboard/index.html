@@ -306,11 +306,12 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-/* Per-person tints. Elva carries the brand pale blue; Laura a soft butter.
-   Baby pink stays reserved for overdue states. */
+/* Per-person tints, from the brand pack: Elva the pale blue, Laura the baby
+   pink. Overdue stays the full-strength pink fill with #A85560 text, so it
+   still reads as a warning next to Laura's faint blush wash. */
 var OWNER_COLORS = {
   Elva:  { chip: '#B8DFFF', wash: '#EFF7FF' },
-  Laura: { chip: '#F2E3B3', wash: '#FBF6E2' }
+  Laura: { chip: '#F2C6CB', wash: '#FBF1F2' }
 };
 
 function findTask(id) {
