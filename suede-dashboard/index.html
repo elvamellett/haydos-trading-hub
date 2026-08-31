@@ -106,7 +106,7 @@ h1, h2, h3 { font-family: Georgia, serif; font-weight: normal; }
   <div class="gate-card">
     <h1>The Suede Studio</h1>
     <p>Enter the studio password to open the dashboard.</p>
-    <input id="gate-input" type="password" autocomplete="current-password" aria-label="Studio password">
+    <input id="gate-input" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Studio password">
     <button id="gate-btn" type="button">Open the dashboard</button>
     <p class="gate-error" id="gate-error"></p>
   </div>
@@ -747,7 +747,8 @@ function openApp() {
 }
 
 function tryPassword() {
-  var val = document.getElementById('gate-input').value;
+  /* Light gate — forgive case and stray spaces from phone keyboards */
+  var val = document.getElementById('gate-input').value.trim().toUpperCase();
   if (val === 'TSS123') {
     try { sessionStorage.setItem('suede-auth', '1'); } catch (e) {}
     openApp();
