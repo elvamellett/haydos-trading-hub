@@ -456,6 +456,38 @@ function taskCard(t) {
     '</div>';
 }
 
+var taskFilter = 'All';
+
+function ownerBoard(owner) {
+  var ownerTasks = state.tasks.filter(function (t) { return t.owner === owner; });
+  var doneCount = ownerTasks.filter(function (t) { return t.status === 'done'; }).length;
+
+  var cols = COLS.map(function (col) {
+    var ts = ownerTasks.filter(function (t) { return t.status === col.key; });
+    var cards = ts.map(taskCard).join('');
+    var hint = '';
+    if (ts.length === 0) {
+      hint = col.key === 'done'
+        ? '<p style="color:#857A69;font-size:12px;margin-top:10px;">Nothing finished yet — drag a task here or tick it off.</p>'
+        : '<p style="color:#857A69;font-size:12px;margin-top:10px;">Drag tasks here.</p>';
+    }
+    return '<div data-colwrap="' + col.key + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:14px 14px 10px;">' +
+      '<div style="font-family:Georgia,serif;font-size:16px;color:#453E33;padding-bottom:8px;border-bottom:1px solid #C4B8A8;">' + col.label +
+      '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> · ' + ts.length + '</span></div>' +
+      hint +
+      '<div data-drop data-col="' + col.key + '" data-owner="' + owner + '" style="min-height:40px;border-radius:6px;padding-top:12px;">' + cards + '</div>' +
+      '</div>';
+  }).join('');
+
+  return '<section style="margin-top:28px;">' +
+    '<div style="display:flex;align-items:baseline;gap:12px;">' +
+    '<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:21px;color:#453E33;">' + owner + '</h2>' +
+    '<span style="color:#857A69;font-size:13px;">' + doneCount + ' of ' + ownerTasks.length + ' done</span>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:10px;align-items:start;">' + cols + '</div>' +
+    '</section>';
+}
+
 function renderTasks() {
   var doneCount = state.tasks.filter(function (t) { return t.status === 'done'; }).length;
   var total = state.tasks.length;
@@ -472,36 +504,21 @@ function renderTasks() {
     '<button data-add-task style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add a task</button>' +
     '</div>';
 
-  var cols = COLS.map(function (col) {
-    var colTasks = state.tasks.filter(function (t) { return t.status === col.key; });
-    var groups = ['Elva', 'Laura'].map(function (owner) {
-      var ts = colTasks.filter(function (t) { return t.owner === owner; });
-      var cards = ts.map(taskCard).join('');
-      if (!cards) {
-        cards = '<div style="min-height:6px;"></div>';
-      }
-      return '<div style="margin-top:14px;">' +
-        '<div style="font-family:Georgia,serif;font-style:italic;font-size:14px;color:#5E564A;padding-bottom:6px;">' + owner +
-        '<span style="color:#857A69;font-style:normal;font-family:Arial,sans-serif;font-size:12px;"> · ' + ts.length + '</span></div>' +
-        '<div data-drop data-col="' + col.key + '" data-owner="' + owner + '" style="min-height:24px;border-radius:6px;">' + cards + '</div>' +
-        '</div>';
-    }).join('');
-
-    var hint = '';
-    if (colTasks.length === 0) {
-      hint = col.key === 'done'
-        ? '<p style="color:#857A69;font-size:12px;margin-top:10px;">Nothing finished yet — drag a task here or tick it off when it’s done.</p>'
-        : '<p style="color:#857A69;font-size:12px;margin-top:10px;">Drag tasks here.</p>';
-    }
-
-    return '<div data-colwrap="' + col.key + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:14px 14px 10px;">' +
-      '<div style="font-family:Georgia,serif;font-size:17px;color:#453E33;padding-bottom:8px;border-bottom:1px solid #C4B8A8;">' + col.label +
-      '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> · ' + colTasks.length + '</span></div>' +
-      hint + groups + '</div>';
+  var pills = ['All', 'Elva', 'Laura'].map(function (f) {
+    var active = taskFilter === f;
+    return '<button data-filter="' + f + '" style="padding:6px 18px;font-family:Arial,sans-serif;font-size:13px;' +
+      (active ? 'font-weight:bold;' : '') +
+      'border:1px solid ' + (active ? '#B8DFFF' : '#C4B8A8') + ';border-radius:16px;' +
+      'background:' + (active ? '#B8DFFF' : '#F7F3EC') + ';color:' + (active ? '#453E33' : '#5E564A') + ';cursor:pointer;">' +
+      (f === 'All' ? 'All tasks' : f) + '</button>';
   }).join('');
+  var filterRow = '<div style="display:flex;gap:8px;margin-top:18px;">' + pills + '</div>';
 
-  return header +
-    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px;align-items:start;">' + cols + '</div>';
+  var boards = taskFilter === 'All'
+    ? ownerBoard('Elva') + ownerBoard('Laura')
+    : ownerBoard(taskFilter);
+
+  return header + filterRow + boards;
 }
 
 /* ─── Placeholder pages ─────────────────────────────────────────────────── */
@@ -674,6 +691,12 @@ document.getElementById('main').addEventListener('click', function (e) {
   }
   if (e.target.closest && e.target.closest('[data-add-task]')) {
     openModal(null);
+    return;
+  }
+  var pill = e.target.closest ? e.target.closest('[data-filter]') : null;
+  if (pill) {
+    taskFilter = pill.getAttribute('data-filter');
+    render();
     return;
   }
   if (suppressClick) return;
