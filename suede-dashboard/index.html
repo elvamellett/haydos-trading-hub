@@ -103,6 +103,31 @@ h1, h2, h3 { font-family: Georgia, serif; font-weight: normal; }
   border: none; background: none; color: #A85560; cursor: pointer;
 }
 #modal .btn-delete:hover { text-decoration: underline; }
+
+/* Generic record modal (clients, prospects, content) — body is JS-rendered */
+#gmodal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 620px; max-width: 94vw; max-height: 90vh; overflow-y: auto; z-index: 61; display: none;
+  background: #F7F3EC; border: 1px solid #C4B8A8; border-radius: 12px; padding: 26px 28px 22px;
+}
+#gmodal h2 { font-size: 20px; color: #453E33; margin-bottom: 6px; }
+#gmodal .modal-actions { display: flex; align-items: center; margin-top: 20px; }
+#gmodal .btn-save {
+  padding: 9px 18px; font-family: Arial, sans-serif; font-size: 14px; border: none;
+  border-radius: 6px; background: #6E5B44; color: #F7F3EC; cursor: pointer;
+}
+#gmodal .btn-save:hover { background: #5E564A; }
+#gmodal .btn-cancel {
+  padding: 9px 14px; font-family: Arial, sans-serif; font-size: 14px;
+  border: 1px solid #C4B8A8; border-radius: 6px; background: #F7F3EC; color: #5E564A;
+  cursor: pointer; margin-left: 8px;
+}
+#gmodal .btn-cancel:hover { border-color: #857A69; }
+#gmodal .btn-delete {
+  margin-left: auto; padding: 9px 4px; font-family: Arial, sans-serif; font-size: 13px;
+  border: none; background: none; color: #A85560; cursor: pointer;
+}
+#gmodal .btn-delete:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -174,6 +199,16 @@ h1, h2, h3 { font-family: Georgia, serif; font-weight: normal; }
     <button class="btn-save" id="f-save" type="button">Save task</button>
     <button class="btn-cancel" id="f-cancel" type="button">Cancel</button>
     <button class="btn-delete" id="f-delete" type="button" style="display:none">Delete task</button>
+  </div>
+</div>
+
+<div id="gmodal">
+  <h2 id="g-title"></h2>
+  <div id="g-body"></div>
+  <div class="modal-actions">
+    <button class="btn-save" id="g-save" type="button">Save</button>
+    <button class="btn-cancel" id="g-cancel" type="button">Cancel</button>
+    <button class="btn-delete" id="g-delete" type="button" style="display:none">Delete</button>
   </div>
 </div>
 
@@ -269,10 +304,11 @@ function seedTasks() {
 }
 
 var state = loadState();
-if (!state || !state.tasks) {
-  state = { tasks: seedTasks() };
-  saveState(state);
-}
+if (!state || !state.tasks) state = { tasks: seedTasks() };
+if (!state.clients) state.clients = [];
+if (!state.prospects) state.prospects = [];
+if (!state.content) state.content = [];
+saveState(state);
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
 var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
@@ -373,13 +409,20 @@ function renderHome() {
       '</div>';
   }
 
+  var liveClients = state.clients.filter(function (c) { return c.stage !== 'Dormant'; });
+  var retainers = liveClients.filter(function (c) { return c.retainer; }).length;
+  var quietCount = state.prospects.filter(isQuietProspect).length;
+  var inPlay = state.prospects.filter(function (p) { return p.status !== 'Won' && p.status !== 'Lost'; }).length;
+
   var stats =
     '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:22px 0 26px;">' +
     statCard(String(open.length), 'Open tasks', 'Elva ' + openElva + ' · Laura ' + openLaura) +
     statCard('—', 'Hours this month', 'Logging starts with the Hours page') +
-    statCard('—', 'Active clients', 'Comes with the Clients page') +
+    statCard(String(liveClients.length), 'Active clients',
+      liveClients.length ? retainers + ' on retainer' : 'Add them on the Clients page') +
     statCard('—', 'Outstanding invoices', 'Comes with the Invoices page') +
-    statCard('—', 'Follow-ups due', 'Comes with the Prospects page') +
+    statCard(String(quietCount), 'Follow-ups due',
+      inPlay ? inPlay + ' prospects in play' : 'Start the pipeline on the Prospects page') +
     '</div>';
 
   /* Today and this week — from task due dates */
@@ -411,13 +454,35 @@ function renderHome() {
     }
   }
 
+  var weekContent = state.content.filter(function (d) {
+    return d.date >= wb.start && d.date <= wb.end;
+  }).sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var contentBody;
+  if (weekContent.length === 0) {
+    contentBody = emptyLine('Nothing scheduled this week. Add entries on the Content page.');
+  } else {
+    contentBody = weekContent.slice(0, 7).map(function (d) {
+      var noLink = d.date <= today && !d.link && d.status !== 'Posted';
+      return '<div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid #DDD3C4;">' +
+        '<span style="flex-shrink:0;width:52px;color:#857A69;font-size:12px;">' + fmtDate(d.date) + '</span>' +
+        '<span style="flex:1;color:#453E33;font-size:13px;">' + esc(d.client || 'Suede Studio') + ' · ' + esc(d.format || d.platform || 'post') + '</span>' +
+        (noLink
+          ? '<span style="flex-shrink:0;background:#F2C6CB;color:#A85560;font-size:11px;padding:1px 8px;border-radius:9px;">no link yet</span>'
+          : '<span style="flex-shrink:0;color:#857A69;font-size:12px;">' + esc(d.status || '') + '</span>') +
+        '</div>';
+    }).join('');
+    if (weekContent.length > 7) {
+      contentBody += '<p style="color:#857A69;font-size:12px;padding-top:8px;">and ' + (weekContent.length - 7) + ' more on the calendar</p>';
+    }
+  }
+
   var modules =
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
     moduleCard('Today and this week', weekBody) +
     moduleCard('Top P1 tasks', p1Body) +
-    moduleCard('Clients near their hour limit', emptyLine('Hour limits arrive with the Clients and Hours pages. Nothing to watch here yet.')) +
+    moduleCard('Content going out this week', contentBody) +
+    moduleCard('Clients near their hour limit', emptyLine('Hour logging lands with the Hours page — limits get watched from there.')) +
     moduleCard('Overdue invoices', emptyLine('Invoice tracking arrives in a later phase. Nothing owed on record yet.')) +
-    moduleCard('Content going out this week', emptyLine('The content calendar is next — once it’s in, this shows what’s posting this week.')) +
     '</div>';
 
   return '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Where things stand</h1>' +
@@ -537,11 +602,356 @@ function renderTasks() {
   return header + filterRow + boards;
 }
 
+/* ─── Clients ───────────────────────────────────────────────────────────── */
+var STAGES = ['Onboarding', 'Active', 'In review', 'Delivered', 'Dormant'];
+var LANES = ['Content', 'Ecommerce', 'Duo'];
+var CHANNELS = ['Cold DM', 'Email', 'Referral', 'Walk-in', 'Enquiry form', 'Instagram'];
+var PSTATUSES = ['Reached out', 'Responded', 'Call booked', 'Reach back out', 'Won', 'Lost'];
+
+function isQuietProspect(p) {
+  if (p.status === 'Won' || p.status === 'Lost' || !p.lastContact) return false;
+  var cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 21);
+  var iso = cutoff.getFullYear() + '-' + String(cutoff.getMonth() + 1).padStart(2, '0') + '-' + String(cutoff.getDate()).padStart(2, '0');
+  return p.lastContact <= iso;
+}
+
+function stageChip(stage) {
+  var s = {
+    'Onboarding': 'background:#F7F3EC;border:1px solid #C4B8A8;color:#5E564A;',
+    'Active': 'background:#B8DFFF;color:#453E33;',
+    'In review': 'background:#DDD3C4;color:#5E564A;',
+    'Delivered': 'background:#AA9E90;color:#FAF8F4;',
+    'Dormant': 'border:1px solid #C4B8A8;color:#857A69;'
+  }[stage] || 'border:1px solid #C4B8A8;color:#857A69;';
+  return '<span style="display:inline-block;font-size:11px;padding:2px 9px;border-radius:9px;' + s + '">' + esc(stage) + '</span>';
+}
+
+function extLink(url, label) {
+  var href = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+  return '<a href="' + esc(href) + '" target="_blank" rel="noopener" style="color:#6E5B44;font-size:12px;">' + label + '</a>';
+}
+
+function renderClients() {
+  var header =
+    '<div style="display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;">' +
+    '<div style="flex:1;min-width:300px;">' +
+    '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Clients</h1>' +
+    '<p style="color:#857A69;font-size:14px;margin-top:2px;">Live clients only — prospects have their own page.</p></div>' +
+    '<button data-add-client style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add a client</button>' +
+    '</div>';
+
+  if (state.clients.length === 0) {
+    return header +
+      '<div style="margin-top:24px;max-width:520px;background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:20px 22px;">' +
+      '<p style="color:#453E33;font-size:14px;">No clients yet.</p>' +
+      '<p style="color:#5E564A;font-size:13px;margin-top:6px;">Add your first client with the button above — prospects you win move in here too.</p>' +
+      '</div>';
+  }
+
+  var order = {};
+  STAGES.forEach(function (s, i) { order[s] = i; });
+  var clients = state.clients.slice().sort(function (a, b) {
+    return (order[a.stage] || 0) - (order[b.stage] || 0);
+  });
+
+  var cards = clients.map(function (c) {
+    var dormant = c.stage === 'Dormant';
+    var lines = [];
+    var contact = [c.contact, c.email, c.phone].filter(Boolean).map(esc).join(' · ');
+    if (contact) lines.push('<div style="color:#5E564A;font-size:13px;margin-top:6px;">' + contact + '</div>');
+    var deal = [c.lane, c.package, c.retainer ? 'Retainer' : ''].filter(Boolean).map(esc).join(' · ');
+    if (deal) lines.push('<div style="color:#857A69;font-size:12px;margin-top:4px;">' + deal + '</div>');
+    var terms = [];
+    if (c.monthlyHours) terms.push(esc(String(c.monthlyHours)) + ' hrs a month');
+    if (c.monthlyPieces) terms.push(esc(String(c.monthlyPieces)) + ' pieces a month');
+    if (c.billingDay) terms.push('bills on day ' + esc(String(c.billingDay)));
+    if (c.startDate) terms.push('started ' + fmtDate(c.startDate));
+    if (terms.length) lines.push('<div style="color:#857A69;font-size:12px;margin-top:4px;">' + terms.join(' · ') + '</div>');
+    var links = [];
+    if (c.website) links.push(extLink(c.website, 'Website'));
+    if (c.instagram) links.push(extLink(/^@/.test(c.instagram) ? 'instagram.com/' + c.instagram.slice(1) : c.instagram, 'Instagram'));
+    if (c.driveLink) links.push(extLink(c.driveLink, 'Drive folder'));
+    if (links.length) lines.push('<div style="display:flex;gap:14px;margin-top:8px;">' + links.join('') + '</div>');
+    if (c.notes) lines.push('<div style="color:#857A69;font-size:12px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(c.notes) + '</div>');
+
+    return '<div data-client="' + esc(c.id) + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:16px 18px;cursor:pointer;' + (dormant ? 'opacity:0.65;' : '') + '">' +
+      '<div style="display:flex;align-items:baseline;gap:10px;">' +
+      '<div style="flex:1;font-family:Georgia,serif;font-size:18px;color:#453E33;">' + esc(c.business) + '</div>' +
+      stageChip(c.stage) + '</div>' + lines.join('') + '</div>';
+  }).join('');
+
+  return header +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:24px;align-items:start;">' + cards + '</div>';
+}
+
+/* ─── Prospects ─────────────────────────────────────────────────────────── */
+function renderProspects() {
+  var quiet = state.prospects.filter(isQuietProspect).length;
+  var inPlay = state.prospects.filter(function (p) { return p.status !== 'Won' && p.status !== 'Lost'; }).length;
+
+  var header =
+    '<div style="display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;">' +
+    '<div style="flex:1;min-width:300px;">' +
+    '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Prospects</h1>' +
+    '<p style="color:#857A69;font-size:14px;margin-top:2px;">' +
+    (state.prospects.length ? inPlay + ' in play' + (quiet ? ' · <span style="color:#A85560;">' + quiet + ' quiet for 3+ weeks</span>' : '') : 'The outreach pipeline lives here.') +
+    '</p></div>' +
+    '<button data-add-prospect style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add a prospect</button>' +
+    '</div>';
+
+  if (state.prospects.length === 0) {
+    return header +
+      '<div style="margin-top:24px;max-width:520px;background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:20px 22px;">' +
+      '<p style="color:#453E33;font-size:14px;">No prospects yet.</p>' +
+      '<p style="color:#5E564A;font-size:13px;margin-top:6px;">Add the outreach list here as you send it — anyone quiet for three weeks gets flagged so nobody slips.</p>' +
+      '</div>';
+  }
+
+  var groups = PSTATUSES.map(function (status) {
+    var ps = state.prospects.filter(function (p) { return p.status === status; });
+    if (ps.length === 0) return '';
+    var muted = status === 'Won' || status === 'Lost';
+    var rows = ps.map(function (p) {
+      var flagged = isQuietProspect(p);
+      return '<div data-prospect="' + esc(p.id) + '" style="display:flex;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid #DDD3C4;cursor:pointer;">' +
+        '<span style="flex:1;min-width:160px;font-size:13px;font-weight:bold;color:' + (flagged ? '#A85560' : (muted ? '#857A69' : '#453E33')) + ';">' + esc(p.name) +
+        (p.business ? '<span style="font-weight:normal;color:#857A69;"> · ' + esc(p.business) + '</span>' : '') + '</span>' +
+        (p.channel ? '<span style="flex-shrink:0;color:#857A69;font-size:12px;">' + esc(p.channel) + '</span>' : '') +
+        (flagged ? '<span style="flex-shrink:0;background:#F2C6CB;color:#A85560;font-size:11px;padding:1px 8px;border-radius:9px;">3 weeks quiet</span>' : '') +
+        (p.lastContact ? '<span style="flex-shrink:0;color:' + (flagged ? '#A85560' : '#857A69') + ';font-size:12px;">last contact ' + fmtDate(p.lastContact) + '</span>' : '') +
+        (p.nextAction ? '<span style="flex-shrink:0;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#5E564A;font-size:12px;">next: ' + esc(p.nextAction) + '</span>' : '') +
+        '</div>';
+    }).join('');
+    var hint = status === 'Won' ? '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> — add them on the Clients page</span>' : '';
+    return '<section style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:16px 20px 10px;margin-top:16px;' + (muted ? 'opacity:0.75;' : '') + '">' +
+      '<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:17px;color:#453E33;padding-bottom:8px;border-bottom:1px solid #C4B8A8;">' + status +
+      '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> · ' + ps.length + '</span>' + hint + '</h2>' + rows + '</section>';
+  }).join('');
+
+  return header + '<div style="margin-top:10px;">' + groups + '</div>';
+}
+
+/* ─── Content calendar ──────────────────────────────────────────────────── */
+var MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+var contentMonth = null; /* 'YYYY-MM' */
+
+function shiftContentMonth(delta) {
+  var y = parseInt(contentMonth.slice(0, 4), 10);
+  var m = parseInt(contentMonth.slice(5, 7), 10) - 1 + delta;
+  var d = new Date(y, m, 1);
+  contentMonth = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function contentChip(entry) {
+  var today = todayStr();
+  var noLink = entry.date <= today && !entry.link && entry.status !== 'Posted';
+  var s;
+  if (noLink) s = 'background:#F2C6CB;color:#A85560;';
+  else if (entry.status === 'Posted') s = 'background:#DDD3C4;color:#857A69;';
+  else if (entry.status === 'Ready') s = 'background:#B8DFFF;color:#453E33;';
+  else if (entry.status === 'Drafted') s = 'background:#EBE4D9;border:1px solid #C4B8A8;color:#5E564A;';
+  else s = 'background:#F7F3EC;border:1px solid #C4B8A8;color:#5E564A;';
+  return '<div data-content-entry="' + esc(entry.id) + '" style="font-size:11px;padding:2px 7px;border-radius:6px;margin-top:4px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' + s + '">' +
+    esc(entry.client || 'Suede Studio') + ' · ' + esc(entry.format || entry.platform || 'post') + '</div>';
+}
+
+function renderContent() {
+  if (!contentMonth) contentMonth = todayStr().slice(0, 7);
+  var y = parseInt(contentMonth.slice(0, 4), 10);
+  var m = parseInt(contentMonth.slice(5, 7), 10);
+  var monthLabel = MONTHS_FULL[m - 1] + ' ' + y;
+  var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7; /* Monday = 0 */
+  var daysInMonth = new Date(y, m, 0).getDate();
+  var today = todayStr();
+
+  var navBtn = 'padding:5px 13px;font-family:Arial,sans-serif;font-size:15px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;';
+  var header =
+    '<div style="display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;">' +
+    '<div style="flex:1;min-width:300px;">' +
+    '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Content</h1>' +
+    '<p style="color:#857A69;font-size:14px;margin-top:2px;">Client content and the studio’s own posts, month by month.</p></div>' +
+    '<button data-add-content style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add an entry</button>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:14px;margin-top:20px;">' +
+    '<button data-month-prev style="' + navBtn + '">‹</button>' +
+    '<span style="font-family:Georgia,serif;font-size:19px;color:#453E33;min-width:170px;text-align:center;">' + monthLabel + '</span>' +
+    '<button data-month-next style="' + navBtn + '">›</button>' +
+    '</div>';
+
+  var dows = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(function (d) {
+    return '<div style="color:#857A69;font-size:12px;padding:4px 2px;">' + d + '</div>';
+  }).join('');
+
+  var cells = [];
+  for (var b = 0; b < firstDow; b++) cells.push('<div></div>');
+  for (var day = 1; day <= daysInMonth; day++) {
+    var iso = contentMonth + '-' + String(day).padStart(2, '0');
+    var entries = state.content.filter(function (e) { return e.date === iso; });
+    var isToday = iso === today;
+    var dayNum = isToday
+      ? '<span style="display:inline-block;min-width:22px;text-align:center;background:#B8DFFF;color:#453E33;border-radius:11px;font-size:12px;padding:2px 0;">' + day + '</span>'
+      : '<span style="color:#5E564A;font-size:12px;">' + day + '</span>';
+    cells.push('<div data-day="' + iso + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:8px;min-height:86px;padding:6px 7px;cursor:pointer;">' +
+      dayNum + entries.map(contentChip).join('') + '</div>');
+  }
+
+  var note = state.content.length === 0
+    ? '<p style="color:#857A69;font-size:13px;margin-top:14px;">Nothing on the calendar yet. Click a day to add the first entry.</p>'
+    : '';
+
+  return header +
+    '<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:14px;">' + dows + cells.join('') + '</div>' +
+    note;
+}
+
+/* ─── Generic record forms ──────────────────────────────────────────────── */
+var FORM_SPECS = {
+  client: {
+    titleNew: 'Add a client', titleEdit: 'Edit client', store: 'clients', required: 'business',
+    fields: [
+      { k: 'business', label: 'Business name', type: 'text' },
+      { k: 'contact', label: 'Contact name', type: 'text', half: true },
+      { k: 'email', label: 'Email', type: 'text', half: true },
+      { k: 'phone', label: 'Phone', type: 'text', half: true },
+      { k: 'website', label: 'Website', type: 'text', half: true },
+      { k: 'instagram', label: 'Instagram', type: 'text', half: true },
+      { k: 'lane', label: 'Lane', type: 'select', options: LANES, half: true },
+      { k: 'package', label: 'Package', type: 'text', half: true },
+      { k: 'stage', label: 'Stage', type: 'select', options: STAGES, half: true },
+      { k: 'monthlyHours', label: 'Monthly hours', type: 'number', half: true },
+      { k: 'monthlyPieces', label: 'Content pieces a month', type: 'number', half: true },
+      { k: 'billingDay', label: 'Billing date (day of month)', type: 'number', half: true },
+      { k: 'startDate', label: 'Start date', type: 'date', half: true },
+      { k: 'retainer', label: 'On a retainer', type: 'check' },
+      { k: 'driveLink', label: 'Drive folder link', type: 'text' },
+      { k: 'notes', label: 'Notes — Production Brief answers live here', type: 'textarea' }
+    ]
+  },
+  prospect: {
+    titleNew: 'Add a prospect', titleEdit: 'Edit prospect', store: 'prospects', required: 'name',
+    fields: [
+      { k: 'name', label: 'Name', type: 'text', half: true },
+      { k: 'business', label: 'Business', type: 'text', half: true },
+      { k: 'channel', label: 'Channel', type: 'select', options: CHANNELS, half: true },
+      { k: 'status', label: 'Status', type: 'select', options: PSTATUSES, half: true },
+      { k: 'lastContact', label: 'Last contact', type: 'date', half: true },
+      { k: 'nextAction', label: 'Next action', type: 'text', half: true },
+      { k: 'notes', label: 'Notes', type: 'textarea' }
+    ]
+  },
+  content: {
+    titleNew: 'Add a content entry', titleEdit: 'Edit content entry', store: 'content', required: 'date',
+    fields: [
+      { k: 'date', label: 'Date', type: 'date', half: true },
+      { k: 'status', label: 'Status', type: 'select', options: ['Planned', 'Drafted', 'Ready', 'Posted'], half: true },
+      { k: 'client', label: 'Client — leave blank for Suede Studio', type: 'text', half: true },
+      { k: 'platform', label: 'Platform', type: 'select', options: ['Instagram', 'TikTok', 'Facebook', 'LinkedIn', 'Pinterest', 'YouTube', 'Other'], half: true },
+      { k: 'format', label: 'Format', type: 'select', options: ['Reel', 'Post', 'Carousel', 'Story', 'Video', 'Other'], half: true },
+      { k: 'link', label: 'Link — Canva file, photo or reel', type: 'text', half: true },
+      { k: 'caption', label: 'Caption', type: 'textarea' }
+    ]
+  }
+};
+
+var gForm = null; /* { type, id } while the generic modal is open */
+
+function fieldHtml(f, value) {
+  var labelStyle = 'display:block;font-size:13px;color:#5E564A;margin:12px 0 4px;';
+  var inputStyle = 'width:100%;padding:8px 10px;font-family:Arial,sans-serif;font-size:14px;border:1px solid #C4B8A8;border-radius:6px;background:#FFFCF5;color:#453E33;outline:none;';
+  var v = value == null ? '' : value;
+  if (f.type === 'check') {
+    return '<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#5E564A;margin:14px 0 2px;cursor:pointer;">' +
+      '<input type="checkbox" data-f="' + f.k + '"' + (v ? ' checked' : '') + '> ' + f.label + '</label>';
+  }
+  if (f.type === 'select') {
+    var opts = f.options.map(function (o) {
+      return '<option value="' + esc(o) + '"' + (v === o ? ' selected' : '') + '>' + esc(o) + '</option>';
+    }).join('');
+    return '<label style="' + labelStyle + '">' + f.label + '</label><select data-f="' + f.k + '" style="' + inputStyle + '">' + opts + '</select>';
+  }
+  if (f.type === 'textarea') {
+    return '<label style="' + labelStyle + '">' + f.label + '</label><textarea data-f="' + f.k + '" style="' + inputStyle + 'resize:vertical;min-height:64px;">' + esc(v) + '</textarea>';
+  }
+  var type = f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text';
+  return '<label style="' + labelStyle + '">' + f.label + '</label><input type="' + type + '" data-f="' + f.k + '" value="' + esc(v) + '" style="' + inputStyle + '">';
+}
+
+function openForm(type, id, presets) {
+  var spec = FORM_SPECS[type];
+  var record = null;
+  if (id) {
+    var arr = state[spec.store];
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === id) record = arr[i];
+  }
+  gForm = { type: type, id: id || null };
+  document.getElementById('g-title').textContent = record ? spec.titleEdit : spec.titleNew;
+
+  var html = '', pending = null;
+  spec.fields.forEach(function (f) {
+    var v = record ? record[f.k] : (presets && presets[f.k] != null ? presets[f.k] : (f.type === 'select' ? f.options[0] : ''));
+    var piece = '<div style="flex:1;min-width:0;">' + fieldHtml(f, v) + '</div>';
+    if (f.half) {
+      if (pending) { html += '<div style="display:flex;gap:12px;">' + pending + piece + '</div>'; pending = null; }
+      else pending = piece;
+    } else {
+      if (pending) { html += '<div style="display:flex;gap:12px;">' + pending + '</div>'; pending = null; }
+      html += fieldHtml(f, v);
+    }
+  });
+  if (pending) html += '<div style="display:flex;gap:12px;">' + pending + '</div>';
+
+  document.getElementById('g-body').innerHTML = html;
+  document.getElementById('g-delete').style.display = record ? '' : 'none';
+  document.getElementById('modal-backdrop').style.display = 'block';
+  document.getElementById('gmodal').style.display = 'block';
+  var firstInput = document.querySelector('#g-body [data-f]');
+  if (firstInput) firstInput.focus();
+}
+
+function closeForm() {
+  gForm = null;
+  document.getElementById('modal-backdrop').style.display = 'none';
+  document.getElementById('gmodal').style.display = 'none';
+}
+
+document.getElementById('g-save').addEventListener('click', function () {
+  if (!gForm) return;
+  var spec = FORM_SPECS[gForm.type];
+  var values = {};
+  var inputs = document.querySelectorAll('#g-body [data-f]');
+  for (var i = 0; i < inputs.length; i++) {
+    var el = inputs[i], k = el.getAttribute('data-f');
+    if (el.type === 'checkbox') values[k] = el.checked;
+    else if (el.type === 'number') values[k] = el.value === '' ? null : parseFloat(el.value);
+    else values[k] = el.value.trim() || (el.tagName === 'SELECT' ? el.value : '');
+  }
+  if (spec.required && !values[spec.required]) {
+    var req = document.querySelector('#g-body [data-f="' + spec.required + '"]');
+    if (req) { req.style.borderColor = '#A85560'; req.focus(); }
+    return;
+  }
+  var arr = state[spec.store];
+  if (gForm.id) {
+    for (var j = 0; j < arr.length; j++) if (arr[j].id === gForm.id) Object.assign(arr[j], values);
+  } else {
+    arr.push(Object.assign({ id: gForm.type + '-' + Date.now() + '-' + Math.floor(Math.random() * 1000) }, values));
+  }
+  closeForm();
+  persistAndRender();
+});
+
+document.getElementById('g-cancel').addEventListener('click', closeForm);
+document.getElementById('g-delete').addEventListener('click', function () {
+  if (!gForm || !gForm.id) return;
+  var arr = state[FORM_SPECS[gForm.type].store];
+  for (var i = 0; i < arr.length; i++) if (arr[i].id === gForm.id) { arr.splice(i, 1); break; }
+  closeForm();
+  persistAndRender();
+});
+
 /* ─── Placeholder pages ─────────────────────────────────────────────────── */
 var PLACEHOLDERS = {
-  content:   ['Content',   'The content calendar comes next — a month grid for client posts and the studio’s own feed.'],
-  clients:   ['Clients',   'The client list arrives in phase 2, with lanes, packages, hour limits and stages.'],
-  prospects: ['Prospects', 'The prospect pipeline arrives in phase 2, with the three-week follow-up flag.'],
   hours:     ['Hours',     'Hour logging arrives in phase 4 — manual entries for Elva and Laura, with retainer balances.'],
   capacity:  ['Capacity',  'Capacity planning arrives in phase 4 — committed hours per week around the day jobs.'],
   invoices:  ['Invoices',  'Invoice tracking arrives in phase 4 — totals, deposits and overdue flags, no generation.'],
@@ -559,17 +969,18 @@ function renderPlaceholder(key) {
 }
 
 /* ─── Routing ───────────────────────────────────────────────────────────── */
+var LIVE_PAGES = { home: renderHome, tasks: renderTasks, clients: renderClients, prospects: renderProspects, content: renderContent };
+
 function currentPage() {
   var h = (location.hash || '#/home').replace('#/', '');
-  if (h === 'home' || h === 'tasks' || PLACEHOLDERS[h]) return h;
+  if (LIVE_PAGES[h] || PLACEHOLDERS[h]) return h;
   return 'home';
 }
 
 function render() {
   var page = currentPage();
   var main = document.getElementById('main');
-  if (page === 'home') main.innerHTML = renderHome();
-  else if (page === 'tasks') main.innerHTML = renderTasks();
+  if (LIVE_PAGES[page]) main.innerHTML = LIVE_PAGES[page]();
   else main.innerHTML = renderPlaceholder(page);
 
   var links = document.querySelectorAll('#sidebar a');
@@ -715,6 +1126,20 @@ document.getElementById('main').addEventListener('click', function (e) {
     render();
     return;
   }
+  if (e.target.closest && e.target.closest('[data-add-client]')) { openForm('client', null); return; }
+  if (e.target.closest && e.target.closest('[data-add-prospect]')) { openForm('prospect', null); return; }
+  if (e.target.closest && e.target.closest('[data-add-content]')) { openForm('content', null, { date: todayStr() }); return; }
+  if (e.target.closest && e.target.closest('[data-month-prev]')) { shiftContentMonth(-1); render(); return; }
+  if (e.target.closest && e.target.closest('[data-month-next]')) { shiftContentMonth(1); render(); return; }
+  if (e.target.tagName === 'A') return; /* let card links open normally */
+  var clientCard = e.target.closest ? e.target.closest('[data-client]') : null;
+  if (clientCard) { openForm('client', clientCard.getAttribute('data-client')); return; }
+  var prospectRow = e.target.closest ? e.target.closest('[data-prospect]') : null;
+  if (prospectRow) { openForm('prospect', prospectRow.getAttribute('data-prospect')); return; }
+  var contentEntry = e.target.closest ? e.target.closest('[data-content-entry]') : null;
+  if (contentEntry) { openForm('content', contentEntry.getAttribute('data-content-entry')); return; }
+  var dayCell = e.target.closest ? e.target.closest('[data-day]') : null;
+  if (dayCell) { openForm('content', null, { date: dayCell.getAttribute('data-day') }); return; }
   if (suppressClick) return;
   var card = e.target.closest ? e.target.closest('[data-card]') : null;
   if (card) openModal(card.getAttribute('data-card'));
@@ -771,7 +1196,10 @@ document.getElementById('f-save').addEventListener('click', function () {
 });
 
 document.getElementById('f-cancel').addEventListener('click', closeModal);
-document.getElementById('modal-backdrop').addEventListener('click', closeModal);
+document.getElementById('modal-backdrop').addEventListener('click', function () {
+  closeModal();
+  closeForm();
+});
 
 document.getElementById('f-delete').addEventListener('click', function () {
   if (!editingId) return;
@@ -782,7 +1210,9 @@ document.getElementById('f-delete').addEventListener('click', function () {
 });
 
 document.addEventListener('keydown', function (e) {
-  if (e.key === 'Escape' && document.getElementById('modal').style.display === 'block') closeModal();
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('modal').style.display === 'block') closeModal();
+  if (document.getElementById('gmodal').style.display === 'block') closeForm();
 });
 
 /* ─── Password gate ─────────────────────────────────────────────────────── */
