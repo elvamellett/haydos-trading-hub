@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Suede Studio</title>
+<style>
+/* Static shell styling only. Everything rendered by JavaScript carries inline
+   style= attributes — no CSS variables anywhere in this file. */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #453E33;
+  background: #F7F3EC;
+}
+h1, h2, h3 { font-family: Georgia, serif; font-weight: normal; }
+
+/* Password gate */
+#gate {
+  position: fixed; inset: 0; background: #F7F3EC;
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+#gate .gate-card {
+  width: 340px; padding: 34px 36px 30px;
+  background: #EBE4D9; border: 1px solid #DDD3C4; border-radius: 12px;
+  text-align: center;
+}
+#gate h1 { font-size: 24px; color: #453E33; margin-bottom: 4px; }
+#gate p { color: #857A69; font-size: 13px; margin-bottom: 18px; }
+#gate input {
+  width: 100%; padding: 9px 12px; font-family: Arial, sans-serif; font-size: 14px;
+  border: 1px solid #C4B8A8; border-radius: 6px; background: #F7F3EC; color: #453E33;
+  text-align: center; outline: none;
+}
+#gate input:focus { border-color: #B8DFFF; }
+#gate button {
+  margin-top: 12px; width: 100%; padding: 9px 12px; font-family: Arial, sans-serif;
+  font-size: 14px; border: none; border-radius: 6px; background: #6E5B44;
+  color: #F7F3EC; cursor: pointer;
+}
+#gate button:hover { background: #5E564A; }
+#gate .gate-error { color: #A85560; font-size: 13px; margin-top: 10px; min-height: 18px; margin-bottom: 0; }
+
+/* App shell */
+#app { display: none; min-height: 100vh; }
+#app.open { display: flex; }
+#sidebar {
+  width: 216px; flex-shrink: 0; padding: 26px 14px 20px;
+  border-right: 1px solid #DDD3C4; background: #F7F3EC;
+}
+#sidebar .studio-name {
+  font-family: Georgia, serif; font-size: 19px; color: #453E33;
+  padding: 0 10px 16px; border-bottom: 1px solid #C4B8A8; margin-bottom: 14px;
+}
+#sidebar a {
+  display: block; padding: 7px 10px; margin-bottom: 2px; border-radius: 6px;
+  color: #5E564A; text-decoration: none; font-size: 14px;
+}
+#sidebar a:hover { background: #B8DFFF; color: #453E33; }
+#main { flex: 1; padding: 34px 44px 60px; max-width: 1240px; }
+
+/* Task modal (static markup, toggled by JS) */
+#modal-backdrop {
+  position: fixed; inset: 0; background: #453E33; opacity: 0.35; z-index: 60; display: none;
+}
+#modal {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 470px; max-height: 90vh; overflow-y: auto; z-index: 61; display: none;
+  background: #F7F3EC; border: 1px solid #C4B8A8; border-radius: 12px; padding: 26px 28px 22px;
+}
+#modal h2 { font-size: 20px; color: #453E33; margin-bottom: 16px; }
+#modal label { display: block; font-size: 13px; color: #5E564A; margin: 12px 0 4px; }
+#modal input[type="text"], #modal input[type="date"], #modal select, #modal textarea {
+  width: 100%; padding: 8px 10px; font-family: Arial, sans-serif; font-size: 14px;
+  border: 1px solid #C4B8A8; border-radius: 6px; background: #FFFCF5; color: #453E33; outline: none;
+}
+#modal input:focus, #modal select:focus, #modal textarea:focus { border-color: #B8DFFF; }
+#modal textarea { resize: vertical; min-height: 64px; }
+#modal .modal-row { display: flex; gap: 12px; }
+#modal .modal-row > div { flex: 1; }
+#modal .modal-actions { display: flex; align-items: center; margin-top: 20px; }
+#modal .btn-save {
+  padding: 9px 18px; font-family: Arial, sans-serif; font-size: 14px; border: none;
+  border-radius: 6px; background: #6E5B44; color: #F7F3EC; cursor: pointer;
+}
+#modal .btn-save:hover { background: #5E564A; }
+#modal .btn-cancel {
+  padding: 9px 14px; font-family: Arial, sans-serif; font-size: 14px;
+  border: 1px solid #C4B8A8; border-radius: 6px; background: #F7F3EC; color: #5E564A;
+  cursor: pointer; margin-left: 8px;
+}
+#modal .btn-cancel:hover { border-color: #857A69; }
+#modal .btn-delete {
+  margin-left: auto; padding: 9px 4px; font-family: Arial, sans-serif; font-size: 13px;
+  border: none; background: none; color: #A85560; cursor: pointer;
+}
+#modal .btn-delete:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="gate-card">
+    <h1>The Suede Studio</h1>
+    <p>Enter the studio password to open the dashboard.</p>
+    <input id="gate-input" type="password" autocomplete="current-password" aria-label="Studio password">
+    <button id="gate-btn" type="button">Open the dashboard</button>
+    <p class="gate-error" id="gate-error"></p>
+  </div>
+</div>
+
+<div id="app">
+  <nav id="sidebar">
+    <div class="studio-name">The Suede Studio</div>
+    <a href="#/home" data-nav="home">Home</a>
+    <a href="#/tasks" data-nav="tasks">Tasks</a>
+    <a href="#/content" data-nav="content">Content</a>
+    <a href="#/clients" data-nav="clients">Clients</a>
+    <a href="#/prospects" data-nav="prospects">Prospects</a>
+    <a href="#/hours" data-nav="hours">Hours</a>
+    <a href="#/capacity" data-nav="capacity">Capacity</a>
+    <a href="#/invoices" data-nav="invoices">Invoices</a>
+    <a href="#/calendar" data-nav="calendar">Calendar</a>
+    <a href="#/import" data-nav="import">Import</a>
+  </nav>
+  <main id="main"></main>
+</div>
+
+<div id="modal-backdrop"></div>
+<div id="modal">
+  <h2 id="modal-title">Add a task</h2>
+  <label for="f-title">Task</label>
+  <input type="text" id="f-title" placeholder="What needs doing?">
+  <div class="modal-row">
+    <div>
+      <label for="f-owner">Owner</label>
+      <select id="f-owner">
+        <option value="Elva">Elva</option>
+        <option value="Laura">Laura</option>
+      </select>
+    </div>
+    <div>
+      <label for="f-priority">Priority</label>
+      <select id="f-priority">
+        <option value="P1">P1</option>
+        <option value="P2" selected>P2</option>
+        <option value="P3">P3</option>
+      </select>
+    </div>
+  </div>
+  <div class="modal-row">
+    <div>
+      <label for="f-client">Client <span style="color:#857A69">(leave blank for studio admin)</span></label>
+      <input type="text" id="f-client" placeholder="">
+    </div>
+    <div>
+      <label for="f-due">Due date <span style="color:#857A69">(optional)</span></label>
+      <input type="date" id="f-due">
+    </div>
+  </div>
+  <label for="f-notes">Notes</label>
+  <textarea id="f-notes"></textarea>
+  <div class="modal-actions">
+    <button class="btn-save" id="f-save" type="button">Save task</button>
+    <button class="btn-cancel" id="f-cancel" type="button">Cancel</button>
+    <button class="btn-delete" id="f-delete" type="button" style="display:none">Delete task</button>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ─── Storage layer ─────────────────────────────────────────────────────────
+   All persistence goes through these two functions and nothing else touches
+   localStorage. In a later phase they swap to a Cloudflare Worker backed by
+   KV without changing the rest of the file. */
+var STORAGE_KEY = 'suede-dashboard-v1';
+
+function loadState() {
+  try {
+    var raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveState(s) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+  } catch (e) { /* storage full or blocked — keep working in memory */ }
+}
+
+/* ─── Seed data: September task bank ──────────────────────────────────── */
+function seedTasks() {
+  var week1 = '2026-09-06', week2 = '2026-09-13', week3 = '2026-09-20', week4 = '2026-09-27';
+  var defs = [
+    /* Week 1 — foundations */
+    ['Elva',  'Build the 40-name outreach list', 'P1', week1, null, 'Week 1 — foundations'],
+    ['Elva',  'Set up LinkedIn account and start posting twice a week', 'P2', week1, null, 'Week 1 — foundations'],
+    ['Elva',  'Set up Google Business Profile', 'P2', week1, null, 'Week 1 — foundations'],
+    ['Elva',  'Request reviews from Beyond the Ferns, Timbertrove, Darcybow, Rego', 'P2', week1, null, 'Week 1 — foundations'],
+    ['Elva',  'Price list decision with Laura', 'P2', week1, null, 'Week 1 — foundations'],
+    ['Elva',  'Sit reel editing session 1', 'P3', week1, null, 'Week 1 — foundations'],
+    ['Laura', 'Build the social calendar for all 4 weeks', 'P1', week1, null, 'Week 1 — foundations'],
+    ['Laura', 'Batch the 16 posts', 'P1', week1, null, 'Week 1 — foundations'],
+    ['Laura', 'Teach reel editing session 1', 'P2', week1, null, 'Week 1 — foundations'],
+    ['Laura', 'Film the website enquiry video', 'P3', week1, null, 'Week 1 — foundations'],
+    ['Laura', 'Price list decision with Elva', 'P2', week1, null, 'Week 1 — foundations'],
+    /* Week 2 — outreach live */
+    ['Elva',  '20 outreaches out, Q4 hook', 'P1', week2, null, 'Week 2 — outreach live'],
+    ['Elva',  'LinkedIn ×2', 'P3', week2, null, 'Week 2 — outreach live'],
+    ['Elva',  'Book first discovery calls into weekend mornings', 'P2', week2, null, 'Week 2 — outreach live'],
+    ['Elva',  'Build Suede Studio dashboard v1', 'P2', week2, null, 'Week 2 — outreach live'],
+    ['Elva',  'Decide the AI package — what’s in it, what it costs', 'P2', week2, null, 'Week 2 — outreach live'],
+    ['Elva',  'Sit reel editing session 2', 'P3', week2, null, 'Week 2 — outreach live'],
+    ['Laura', 'Teach reel editing session 2', 'P2', week2, null, 'Week 2 — outreach live'],
+    ['Laura', 'Rego videos: finish edits, send for client approval', 'P2', week2, 'Rego', 'Week 2 — outreach live'],
+    ['Laura', 'Lock the Rego launch date', 'P2', week2, 'Rego', 'Week 2 — outreach live'],
+    ['Laura', 'Post to calendar, keep the feed running', 'P3', week2, null, 'Week 2 — outreach live'],
+    ['Laura', 'Film the Elva and Laura pieces', 'P3', week2, null, 'Week 2 — outreach live'],
+    /* Week 3 — calls and plans */
+    ['Elva',  'Run 3–4 discovery calls', 'P1', week3, null, 'Week 3 — calls and plans'],
+    ['Elva',  '20 more outreaches plus follow-up 2 on week 2’s list', 'P2', week3, null, 'Week 3 — calls and plans'],
+    ['Elva',  'LinkedIn ×2', 'P3', week3, null, 'Week 3 — calls and plans'],
+    ['Elva',  'Write the October goal list', 'P2', week3, null, 'Week 3 — calls and plans'],
+    ['Elva',  'Get Darcybow dashboard live', 'P2', week3, 'Darcybow', 'Week 3 — calls and plans'],
+    ['Elva',  'Hand the AI package scope to Laura', 'P2', week3, null, 'Week 3 — calls and plans'],
+    ['Elva',  'Edit 2 reels solo, no Laura', 'P3', week3, null, 'Week 3 — calls and plans'],
+    ['Laura', 'Build the AI package content run into the calendar', 'P2', week3, null, 'Week 3 — calls and plans'],
+    ['Laura', 'Rego videos ready to go, launch date confirmed', 'P2', week3, 'Rego', 'Week 3 — calls and plans'],
+    ['Laura', 'Keep the feed running', 'P3', week3, null, 'Week 3 — calls and plans'],
+    ['Laura', 'Review Elva’s 2 solo reels', 'P3', week3, null, 'Week 3 — calls and plans'],
+    /* Week 4 — close */
+    ['Elva',  'Close 2 clients', 'P1', week4, null, 'Week 4 — close'],
+    ['Elva',  'Proposals out within 48 hrs of each call', 'P1', week4, null, 'Week 4 — close'],
+    ['Elva',  'Follow-up 3 on anyone gone quiet', 'P2', week4, null, 'Week 4 — close'],
+    ['Elva',  'AI package added to the website', 'P2', week4, null, 'Week 4 — close'],
+    ['Elva',  'Proof slides into the deck', 'P3', week4, null, 'Week 4 — close'],
+    ['Elva',  'LinkedIn ×2', 'P3', week4, null, 'Week 4 — close'],
+    ['Laura', 'Launch the Rego videos', 'P1', week4, 'Rego', 'Week 4 — close'],
+    ['Laura', 'Post Rego as a case study', 'P2', week4, 'Rego', 'Week 4 — close'],
+    ['Laura', 'AI package posts live', 'P2', week4, null, 'Week 4 — close'],
+    ['Laura', 'Keep the feed running', 'P3', week4, null, 'Week 4 — close']
+  ];
+  return defs.map(function (d, i) {
+    return {
+      id: 'seed-' + (i + 1),
+      title: d[1],
+      owner: d[0],
+      client: d[4],
+      priority: d[2],
+      due: d[3],
+      notes: d[5],
+      status: 'todo',
+      doneDate: null
+    };
+  });
+}
+
+var state = loadState();
+if (!state || !state.tasks) {
+  state = { tasks: seedTasks() };
+  saveState(state);
+}
+
+/* ─── Helpers ───────────────────────────────────────────────────────────── */
+var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+var DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function fmtDate(iso) {
+  if (!iso) return '';
+  var p = iso.split('-');
+  return parseInt(p[2], 10) + ' ' + MONTHS[parseInt(p[1], 10) - 1];
+}
+function weekBounds() {
+  var d = new Date();
+  var day = d.getDay(); /* Monday-start week */
+  var diffToMon = (day === 0 ? -6 : 1 - day);
+  var mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon);
+  var sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+  function iso(x) {
+    return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+  }
+  return { start: iso(mon), end: iso(sun) };
+}
+function isOverdue(t) {
+  return t.status !== 'done' && t.due && t.due < todayStr();
+}
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function findTask(id) {
+  for (var i = 0; i < state.tasks.length; i++) if (state.tasks[i].id === id) return state.tasks[i];
+  return null;
+}
+
+/* ─── Small render pieces (all inline styles) ───────────────────────────── */
+function priorityTag(p, muted) {
+  if (p === 'P1' && !muted) {
+    return '<span style="display:inline-block;background:#B8DFFF;color:#453E33;font-size:11px;font-weight:bold;padding:1px 7px;border-radius:9px;font-family:Arial,sans-serif;">P1</span>';
+  }
+  if (p === 'P2' && !muted) {
+    return '<span style="display:inline-block;background:#DDD3C4;color:#5E564A;font-size:11px;padding:1px 7px;border-radius:9px;font-family:Arial,sans-serif;">P2</span>';
+  }
+  return '<span style="display:inline-block;border:1px solid #C4B8A8;color:#857A69;font-size:11px;padding:0 6px;border-radius:9px;font-family:Arial,sans-serif;">' + esc(p) + '</span>';
+}
+
+function ownerDot(owner) {
+  return '<span style="color:#5E564A;font-size:12px;">' + esc(owner) + '</span>';
+}
+
+function moduleCard(title, bodyHtml) {
+  return '<section style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:18px 20px 14px;">' +
+    '<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:17px;color:#453E33;padding-bottom:10px;border-bottom:1px solid #C4B8A8;margin-bottom:4px;">' + title + '</h2>' +
+    bodyHtml + '</section>';
+}
+
+function emptyLine(text) {
+  return '<p style="color:#857A69;font-size:13px;padding:10px 0 4px;">' + text + '</p>';
+}
+
+function listRow(t, opts) {
+  opts = opts || {};
+  var overdue = isOverdue(t);
+  var color = overdue ? '#A85560' : '#453E33';
+  var dueText = t.due ? (overdue ? 'was due ' + fmtDate(t.due) : 'due ' + fmtDate(t.due)) : '';
+  return '<div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid #DDD3C4;">' +
+    '<span style="flex-shrink:0;width:44px;color:#857A69;font-size:12px;">' + esc(t.owner) + '</span>' +
+    '<span style="flex:1;color:' + color + ';font-size:13px;">' + esc(t.title) + '</span>' +
+    (opts.showPriority ? priorityTag(t.priority) : '') +
+    (dueText ? '<span style="flex-shrink:0;color:' + (overdue ? '#A85560' : '#857A69') + ';font-size:12px;">' + dueText + '</span>' : '') +
+    '</div>';
+}
+
+/* ─── Home page ─────────────────────────────────────────────────────────── */
+function renderHome() {
+  var now = new Date();
+  var dateLine = DAYS[now.getDay()] + ' ' + now.getDate() + ' ' + MONTHS[now.getMonth()];
+  var open = state.tasks.filter(function (t) { return t.status !== 'done'; });
+  var openElva = open.filter(function (t) { return t.owner === 'Elva'; }).length;
+  var openLaura = open.filter(function (t) { return t.owner === 'Laura'; }).length;
+
+  function statCard(value, label, sub) {
+    return '<div style="background:#B8DFFF;border-radius:10px;padding:16px 18px 14px;">' +
+      '<div style="font-family:Georgia,serif;font-size:32px;line-height:1.15;color:#453E33;">' + value + '</div>' +
+      '<div style="font-size:13px;color:#453E33;margin-top:2px;">' + label + '</div>' +
+      (sub ? '<div style="font-size:12px;color:#5E564A;margin-top:4px;">' + sub + '</div>' : '') +
+      '</div>';
+  }
+
+  var stats =
+    '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:22px 0 26px;">' +
+    statCard(String(open.length), 'Open tasks', 'Elva ' + openElva + ' · Laura ' + openLaura) +
+    statCard('—', 'Hours this month', 'Logging starts with the Hours page') +
+    statCard('—', 'Active clients', 'Comes with the Clients page') +
+    statCard('—', 'Outstanding invoices', 'Comes with the Invoices page') +
+    statCard('—', 'Follow-ups due', 'Comes with the Prospects page') +
+    '</div>';
+
+  /* Today and this week — from task due dates */
+  var wb = weekBounds();
+  var today = todayStr();
+  var dueSoon = state.tasks.filter(function (t) {
+    return t.status !== 'done' && t.due && (t.due < today || (t.due >= wb.start && t.due <= wb.end));
+  });
+  dueSoon.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : 0; });
+  var CAP = 7;
+  var weekBody;
+  if (dueSoon.length === 0) {
+    weekBody = emptyLine('Nothing due this week. Give tasks due dates on the board and they show up here.');
+  } else {
+    weekBody = dueSoon.slice(0, CAP).map(function (t) { return listRow(t, {}); }).join('');
+    if (dueSoon.length > CAP) {
+      weekBody += '<p style="color:#857A69;font-size:12px;padding-top:8px;">and ' + (dueSoon.length - CAP) + ' more on the board</p>';
+    }
+  }
+
+  var p1s = state.tasks.filter(function (t) { return t.status !== 'done' && t.priority === 'P1'; });
+  var p1Body;
+  if (p1s.length === 0) {
+    p1Body = emptyLine('No open P1s. Mark a task P1 on the board and it shows up here.');
+  } else {
+    p1Body = p1s.slice(0, 6).map(function (t) { return listRow(t, {}); }).join('');
+    if (p1s.length > 6) {
+      p1Body += '<p style="color:#857A69;font-size:12px;padding-top:8px;">and ' + (p1s.length - 6) + ' more on the board</p>';
+    }
+  }
+
+  var modules =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' +
+    moduleCard('Today and this week', weekBody) +
+    moduleCard('Top P1 tasks', p1Body) +
+    moduleCard('Clients near their hour limit', emptyLine('Hour limits arrive with the Clients and Hours pages. Nothing to watch here yet.')) +
+    moduleCard('Overdue invoices', emptyLine('Invoice tracking arrives in a later phase. Nothing owed on record yet.')) +
+    moduleCard('Content going out this week', emptyLine('The content calendar is next — once it’s in, this shows what’s posting this week.')) +
+    '</div>';
+
+  return '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Where things stand</h1>' +
+    '<p style="color:#857A69;font-size:14px;margin-top:2px;">' + dateLine + '</p>' +
+    stats + modules;
+}
+
+/* ─── Tasks page ────────────────────────────────────────────────────────── */
+var COLS = [
+  { key: 'todo', label: 'To do' },
+  { key: 'doing', label: 'Doing' },
+  { key: 'done', label: 'Done' }
+];
+
+function taskCard(t) {
+  var overdue = isOverdue(t);
+  var done = t.status === 'done';
+  var bg = overdue ? '#F2C6CB' : '#F7F3EC';
+  var border = overdue ? '#E3AEB6' : '#DDD3C4';
+  var titleColor = overdue ? '#A85560' : (done ? '#857A69' : '#453E33');
+  var metaColor = overdue ? '#A85560' : '#857A69';
+
+  var meta = [];
+  meta.push(priorityTag(t.priority, done));
+  if (t.client) {
+    meta.push('<span style="color:' + metaColor + ';font-size:12px;">' + esc(t.client) + '</span>');
+  }
+  if (done && t.doneDate) {
+    meta.push('<span style="color:#857A69;font-size:12px;">done ' + fmtDate(t.doneDate) + '</span>');
+  } else if (t.due) {
+    meta.push('<span style="color:' + metaColor + ';font-size:12px;">' + (overdue ? 'was due ' : 'due ') + fmtDate(t.due) + '</span>');
+  }
+
+  var tick = '';
+  if (!done) {
+    tick = '<button data-tick="' + esc(t.id) + '" title="Mark done" style="flex-shrink:0;width:20px;height:20px;border-radius:10px;border:1px solid ' + (overdue ? '#A85560' : '#C4B8A8') + ';background:' + bg + ';color:' + (overdue ? '#A85560' : '#857A69') + ';font-size:11px;line-height:1;cursor:pointer;padding:0;font-family:Arial,sans-serif;">✓</button>';
+  }
+
+  return '<div draggable="true" data-card="' + esc(t.id) + '" style="background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:grab;">' +
+    '<div style="display:flex;align-items:flex-start;gap:8px;">' +
+    '<div style="flex:1;font-size:13px;font-weight:bold;color:' + titleColor + ';">' + esc(t.title) + '</div>' + tick +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap;">' + meta.join('') + '</div>' +
+    '</div>';
+}
+
+function renderTasks() {
+  var doneCount = state.tasks.filter(function (t) { return t.status === 'done'; }).length;
+  var total = state.tasks.length;
+  var pct = total ? Math.round(doneCount / total * 100) : 0;
+
+  var header =
+    '<div style="display:flex;align-items:flex-end;gap:24px;flex-wrap:wrap;">' +
+    '<div style="flex:1;min-width:300px;">' +
+    '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">The Suede Studio Task Board</h1>' +
+    '<div style="display:flex;align-items:center;gap:10px;margin-top:8px;">' +
+    '<div style="width:200px;height:6px;border-radius:3px;background:#DDD3C4;overflow:hidden;"><div style="width:' + pct + '%;height:6px;background:#B8DFFF;"></div></div>' +
+    '<span style="color:#857A69;font-size:13px;">' + doneCount + ' of ' + total + ' done</span>' +
+    '</div></div>' +
+    '<button data-add-task style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add a task</button>' +
+    '</div>';
+
+  var cols = COLS.map(function (col) {
+    var colTasks = state.tasks.filter(function (t) { return t.status === col.key; });
+    var groups = ['Elva', 'Laura'].map(function (owner) {
+      var ts = colTasks.filter(function (t) { return t.owner === owner; });
+      var cards = ts.map(taskCard).join('');
+      if (!cards) {
+        cards = '<div style="min-height:6px;"></div>';
+      }
+      return '<div style="margin-top:14px;">' +
+        '<div style="font-family:Georgia,serif;font-style:italic;font-size:14px;color:#5E564A;padding-bottom:6px;">' + owner +
+        '<span style="color:#857A69;font-style:normal;font-family:Arial,sans-serif;font-size:12px;"> · ' + ts.length + '</span></div>' +
+        '<div data-drop data-col="' + col.key + '" data-owner="' + owner + '" style="min-height:24px;border-radius:6px;">' + cards + '</div>' +
+        '</div>';
+    }).join('');
+
+    var hint = '';
+    if (colTasks.length === 0) {
+      hint = col.key === 'done'
+        ? '<p style="color:#857A69;font-size:12px;margin-top:10px;">Nothing finished yet — drag a task here or tick it off when it’s done.</p>'
+        : '<p style="color:#857A69;font-size:12px;margin-top:10px;">Drag tasks here.</p>';
+    }
+
+    return '<div data-colwrap="' + col.key + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:14px 14px 10px;">' +
+      '<div style="font-family:Georgia,serif;font-size:17px;color:#453E33;padding-bottom:8px;border-bottom:1px solid #C4B8A8;">' + col.label +
+      '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> · ' + colTasks.length + '</span></div>' +
+      hint + groups + '</div>';
+  }).join('');
+
+  return header +
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px;align-items:start;">' + cols + '</div>';
+}
+
+/* ─── Placeholder pages ─────────────────────────────────────────────────── */
+var PLACEHOLDERS = {
+  content:   ['Content',   'The content calendar comes next — a month grid for client posts and the studio’s own feed.'],
+  clients:   ['Clients',   'The client list arrives in phase 2, with lanes, packages, hour limits and stages.'],
+  prospects: ['Prospects', 'The prospect pipeline arrives in phase 2, with the three-week follow-up flag.'],
+  hours:     ['Hours',     'Hour logging arrives in phase 4 — manual entries for Elva and Laura, with retainer balances.'],
+  capacity:  ['Capacity',  'Capacity planning arrives in phase 4 — committed hours per week around the day jobs.'],
+  invoices:  ['Invoices',  'Invoice tracking arrives in phase 4 — totals, deposits and overdue flags, no generation.'],
+  calendar:  ['Calendar',  'The calendar arrives in phase 3, synced two ways with the studio Google Calendar.'],
+  import:    ['Import',    'The importer arrives in phase 5 — drop in a deck and it comes back as a task list to approve.']
+};
+
+function renderPlaceholder(key) {
+  var p = PLACEHOLDERS[key];
+  return '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">' + p[0] + '</h1>' +
+    '<div style="margin-top:22px;max-width:520px;background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:20px 22px;">' +
+    '<p style="font-family:Georgia,serif;font-size:16px;color:#453E33;">Coming next</p>' +
+    '<p style="color:#5E564A;font-size:13px;margin-top:6px;">' + p[1] + '</p>' +
+    '</div>';
+}
+
+/* ─── Routing ───────────────────────────────────────────────────────────── */
+function currentPage() {
+  var h = (location.hash || '#/home').replace('#/', '');
+  if (h === 'home' || h === 'tasks' || PLACEHOLDERS[h]) return h;
+  return 'home';
+}
+
+function render() {
+  var page = currentPage();
+  var main = document.getElementById('main');
+  if (page === 'home') main.innerHTML = renderHome();
+  else if (page === 'tasks') main.innerHTML = renderTasks();
+  else main.innerHTML = renderPlaceholder(page);
+
+  var links = document.querySelectorAll('#sidebar a');
+  for (var i = 0; i < links.length; i++) {
+    var active = links[i].getAttribute('data-nav') === page;
+    links[i].style.background = active ? '#B8DFFF' : '';
+    links[i].style.color = active ? '#453E33' : '';
+    links[i].style.fontWeight = active ? 'bold' : '';
+  }
+}
+
+window.addEventListener('hashchange', render);
+
+/* ─── Task board interactions ───────────────────────────────────────────── */
+var dragId = null;
+var suppressClick = false;
+
+function persistAndRender() {
+  saveState(state);
+  render();
+}
+
+function setStatus(t, status) {
+  if (t.status === status) return;
+  t.status = status;
+  if (status === 'done') t.doneDate = todayStr();
+  else t.doneDate = null;
+}
+
+/* Move task in the array: before targetId, or to the end (renders last in its
+   group). Array order is the manual order — never auto-sorted. */
+function repositionTask(id, beforeId) {
+  var idx = state.tasks.findIndex(function (t) { return t.id === id; });
+  if (idx === -1) return;
+  var task = state.tasks.splice(idx, 1)[0];
+  if (beforeId) {
+    var at = state.tasks.findIndex(function (t) { return t.id === beforeId; });
+    if (at === -1) state.tasks.push(task);
+    else state.tasks.splice(at, 0, task);
+  } else {
+    state.tasks.push(task);
+  }
+}
+
+function clearDropMarkers() {
+  var cards = document.querySelectorAll('[data-card]');
+  for (var i = 0; i < cards.length; i++) cards[i].style.boxShadow = '';
+  var zones = document.querySelectorAll('[data-drop]');
+  for (var j = 0; j < zones.length; j++) zones[j].style.background = '';
+}
+
+document.getElementById('main').addEventListener('dragstart', function (e) {
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  if (!card) return;
+  dragId = card.getAttribute('data-card');
+  suppressClick = true;
+  card.style.opacity = '0.45';
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', dragId); } catch (err) {}
+  }
+});
+
+document.getElementById('main').addEventListener('dragend', function () {
+  dragId = null;
+  clearDropMarkers();
+  render();
+  setTimeout(function () { suppressClick = false; }, 0);
+});
+
+document.getElementById('main').addEventListener('dragover', function (e) {
+  if (!dragId) return;
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  var zone = e.target.closest ? e.target.closest('[data-drop]') : null;
+  var colwrap = e.target.closest ? e.target.closest('[data-colwrap]') : null;
+  if (!card && !zone && !colwrap) return;
+  e.preventDefault();
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+  clearDropMarkers();
+  if (card && card.getAttribute('data-card') !== dragId) {
+    card.style.boxShadow = '0 -3px 0 0 #6E5B44';
+  } else if (zone) {
+    zone.style.background = '#DDD3C4';
+  }
+});
+
+document.getElementById('main').addEventListener('drop', function (e) {
+  if (!dragId) return;
+  var task = findTask(dragId);
+  if (!task) return;
+  e.preventDefault();
+
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  var zone = e.target.closest ? e.target.closest('[data-drop]') : null;
+  var colwrap = e.target.closest ? e.target.closest('[data-colwrap]') : null;
+
+  if (card && card.getAttribute('data-card') !== dragId) {
+    var beforeId = card.getAttribute('data-card');
+    var target = findTask(beforeId);
+    setStatus(task, target.status);
+    repositionTask(task.id, beforeId);
+  } else if (zone) {
+    setStatus(task, zone.getAttribute('data-col'));
+    repositionTask(task.id, null);
+  } else if (colwrap) {
+    setStatus(task, colwrap.getAttribute('data-colwrap'));
+    repositionTask(task.id, null);
+  } else {
+    return;
+  }
+  dragId = null;
+  persistAndRender();
+});
+
+/* Card hover — pale blue border, set inline so no class is involved */
+document.getElementById('main').addEventListener('mouseover', function (e) {
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  if (card && !isOverdue(findTask(card.getAttribute('data-card')) || {})) {
+    card.style.borderColor = '#B8DFFF';
+  }
+});
+document.getElementById('main').addEventListener('mouseout', function (e) {
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  if (card && !isOverdue(findTask(card.getAttribute('data-card')) || {})) {
+    card.style.borderColor = '#DDD3C4';
+  }
+});
+
+document.getElementById('main').addEventListener('click', function (e) {
+  var tick = e.target.closest ? e.target.closest('[data-tick]') : null;
+  if (tick) {
+    var t = findTask(tick.getAttribute('data-tick'));
+    if (t) { setStatus(t, 'done'); persistAndRender(); }
+    return;
+  }
+  if (e.target.closest && e.target.closest('[data-add-task]')) {
+    openModal(null);
+    return;
+  }
+  if (suppressClick) return;
+  var card = e.target.closest ? e.target.closest('[data-card]') : null;
+  if (card) openModal(card.getAttribute('data-card'));
+});
+
+/* ─── Modal ─────────────────────────────────────────────────────────────── */
+var editingId = null;
+
+function openModal(id) {
+  editingId = id;
+  var t = id ? findTask(id) : null;
+  document.getElementById('modal-title').textContent = t ? 'Edit task' : 'Add a task';
+  document.getElementById('f-title').value = t ? t.title : '';
+  document.getElementById('f-owner').value = t ? t.owner : 'Elva';
+  document.getElementById('f-priority').value = t ? t.priority : 'P2';
+  document.getElementById('f-client').value = t && t.client ? t.client : '';
+  document.getElementById('f-due').value = t && t.due ? t.due : '';
+  document.getElementById('f-notes').value = t && t.notes ? t.notes : '';
+  document.getElementById('f-delete').style.display = t ? '' : 'none';
+  document.getElementById('modal-backdrop').style.display = 'block';
+  document.getElementById('modal').style.display = 'block';
+  document.getElementById('f-title').focus();
+}
+
+function closeModal() {
+  editingId = null;
+  document.getElementById('modal-backdrop').style.display = 'none';
+  document.getElementById('modal').style.display = 'none';
+}
+
+document.getElementById('f-save').addEventListener('click', function () {
+  var title = document.getElementById('f-title').value.trim();
+  if (!title) { document.getElementById('f-title').focus(); return; }
+  var fields = {
+    title: title,
+    owner: document.getElementById('f-owner').value,
+    priority: document.getElementById('f-priority').value,
+    client: document.getElementById('f-client').value.trim() || null,
+    due: document.getElementById('f-due').value || null,
+    notes: document.getElementById('f-notes').value.trim()
+  };
+  if (editingId) {
+    var t = findTask(editingId);
+    if (t) Object.assign(t, fields);
+  } else {
+    state.tasks.push(Object.assign({
+      id: 't-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+      status: 'todo',
+      doneDate: null
+    }, fields));
+  }
+  closeModal();
+  persistAndRender();
+});
+
+document.getElementById('f-cancel').addEventListener('click', closeModal);
+document.getElementById('modal-backdrop').addEventListener('click', closeModal);
+
+document.getElementById('f-delete').addEventListener('click', function () {
+  if (!editingId) return;
+  var idx = state.tasks.findIndex(function (t) { return t.id === editingId; });
+  if (idx !== -1) state.tasks.splice(idx, 1);
+  closeModal();
+  persistAndRender();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && document.getElementById('modal').style.display === 'block') closeModal();
+});
+
+/* ─── Password gate ─────────────────────────────────────────────────────── */
+function openApp() {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app').className = 'open';
+  render();
+}
+
+function tryPassword() {
+  var val = document.getElementById('gate-input').value;
+  if (val === 'TSS123') {
+    try { sessionStorage.setItem('suede-auth', '1'); } catch (e) {}
+    openApp();
+  } else {
+    document.getElementById('gate-error').textContent = 'That’s not it — try again.';
+    document.getElementById('gate-input').value = '';
+    document.getElementById('gate-input').focus();
+  }
+}
+
+document.getElementById('gate-btn').addEventListener('click', tryPassword);
+document.getElementById('gate-input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') tryPassword();
+});
+
+var authed = false;
+try { authed = sessionStorage.getItem('suede-auth') === '1'; } catch (e) {}
+if (authed) openApp();
+else document.getElementById('gate-input').focus();
+</script>
+</body>
+</html>
