@@ -306,6 +306,13 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
+/* Per-person tints. Elva carries the brand pale blue; Laura a soft butter.
+   Baby pink stays reserved for overdue states. */
+var OWNER_COLORS = {
+  Elva:  { chip: '#B8DFFF', wash: '#EFF7FF' },
+  Laura: { chip: '#F2E3B3', wash: '#FBF6E2' }
+};
+
 function findTask(id) {
   for (var i = 0; i < state.tasks.length; i++) if (state.tasks[i].id === id) return state.tasks[i];
   return null;
@@ -341,8 +348,9 @@ function listRow(t, opts) {
   var overdue = isOverdue(t);
   var color = overdue ? '#A85560' : '#453E33';
   var dueText = t.due ? (overdue ? 'was due ' + fmtDate(t.due) : 'due ' + fmtDate(t.due)) : '';
+  var chip = (OWNER_COLORS[t.owner] || {}).chip || '#DDD3C4';
   return '<div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid #DDD3C4;">' +
-    '<span style="flex-shrink:0;width:44px;color:#857A69;font-size:12px;">' + esc(t.owner) + '</span>' +
+    '<span style="flex-shrink:0;min-width:48px;text-align:center;background:' + chip + ';color:#453E33;font-size:11px;padding:1px 8px;border-radius:9px;">' + esc(t.owner) + '</span>' +
     '<span style="flex:1;color:' + color + ';font-size:13px;">' + esc(t.title) + '</span>' +
     (opts.showPriority ? priorityTag(t.priority) : '') +
     (dueText ? '<span style="flex-shrink:0;color:' + (overdue ? '#A85560' : '#857A69') + ';font-size:12px;">' + dueText + '</span>' : '') +
@@ -427,7 +435,8 @@ var COLS = [
 function taskCard(t) {
   var overdue = isOverdue(t);
   var done = t.status === 'done';
-  var bg = overdue ? '#F2C6CB' : '#F7F3EC';
+  var wash = (OWNER_COLORS[t.owner] || {}).wash || '#F7F3EC';
+  var bg = overdue ? '#F2C6CB' : wash;
   var border = overdue ? '#E3AEB6' : '#DDD3C4';
   var titleColor = overdue ? '#A85560' : (done ? '#857A69' : '#453E33');
   var metaColor = overdue ? '#A85560' : '#857A69';
@@ -479,8 +488,10 @@ function ownerBoard(owner) {
       '</div>';
   }).join('');
 
+  var dot = (OWNER_COLORS[owner] || {}).chip || '#DDD3C4';
   return '<section style="margin-top:28px;">' +
-    '<div style="display:flex;align-items:baseline;gap:12px;">' +
+    '<div style="display:flex;align-items:baseline;gap:10px;">' +
+    '<span style="align-self:center;width:13px;height:13px;border-radius:7px;background:' + dot + ';"></span>' +
     '<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:21px;color:#453E33;">' + owner + '</h2>' +
     '<span style="color:#857A69;font-size:13px;">' + doneCount + ' of ' + ownerTasks.length + ' done</span>' +
     '</div>' +
@@ -506,11 +517,15 @@ function renderTasks() {
 
   var pills = ['All', 'Elva', 'Laura'].map(function (f) {
     var active = taskFilter === f;
+    var activeBg = f === 'All' ? '#B8DFFF' : OWNER_COLORS[f].chip;
+    var dot = f === 'All' ? '' :
+      '<span style="display:inline-block;width:9px;height:9px;border-radius:5px;background:' + OWNER_COLORS[f].chip + ';margin-right:7px;' +
+      (active ? 'border:1px solid #453E33;' : '') + '"></span>';
     return '<button data-filter="' + f + '" style="padding:6px 18px;font-family:Arial,sans-serif;font-size:13px;' +
       (active ? 'font-weight:bold;' : '') +
-      'border:1px solid ' + (active ? '#B8DFFF' : '#C4B8A8') + ';border-radius:16px;' +
-      'background:' + (active ? '#B8DFFF' : '#F7F3EC') + ';color:' + (active ? '#453E33' : '#5E564A') + ';cursor:pointer;">' +
-      (f === 'All' ? 'All tasks' : f) + '</button>';
+      'border:1px solid ' + (active ? activeBg : '#C4B8A8') + ';border-radius:16px;' +
+      'background:' + (active ? activeBg : '#F7F3EC') + ';color:' + (active ? '#453E33' : '#5E564A') + ';cursor:pointer;">' +
+      dot + (f === 'All' ? 'All tasks' : f) + '</button>';
   }).join('');
   var filterRow = '<div style="display:flex;gap:8px;margin-top:18px;">' + pills + '</div>';
 
