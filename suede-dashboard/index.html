@@ -306,12 +306,11 @@ function esc(s) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-/* Per-person tints, from the brand pack: Elva the pale blue, Laura the baby
-   pink. Overdue stays the full-strength pink fill with #A85560 text, so it
-   still reads as a warning next to Laura's faint blush wash. */
+/* Per-person tints, from the website's taupes — blue and pink stay reserved
+   for the interface accent and overdue states. */
 var OWNER_COLORS = {
-  Elva:  { chip: '#B8DFFF', wash: '#EFF7FF' },
-  Laura: { chip: '#F2C6CB', wash: '#FBF1F2' }
+  Elva:  { chip: '#776D5F', text: '#FAF8F4', wash: '#EAE6E0' },
+  Laura: { chip: '#AA9E90', text: '#3E382E', wash: '#F3EFE9' }
 };
 
 function findTask(id) {
@@ -349,9 +348,9 @@ function listRow(t, opts) {
   var overdue = isOverdue(t);
   var color = overdue ? '#A85560' : '#453E33';
   var dueText = t.due ? (overdue ? 'was due ' + fmtDate(t.due) : 'due ' + fmtDate(t.due)) : '';
-  var chip = (OWNER_COLORS[t.owner] || {}).chip || '#DDD3C4';
+  var oc = OWNER_COLORS[t.owner] || { chip: '#DDD3C4', text: '#453E33' };
   return '<div style="display:flex;align-items:baseline;gap:10px;padding:8px 0;border-bottom:1px solid #DDD3C4;">' +
-    '<span style="flex-shrink:0;min-width:48px;text-align:center;background:' + chip + ';color:#453E33;font-size:11px;padding:1px 8px;border-radius:9px;">' + esc(t.owner) + '</span>' +
+    '<span style="flex-shrink:0;min-width:48px;text-align:center;background:' + oc.chip + ';color:' + oc.text + ';font-size:11px;padding:1px 8px;border-radius:9px;">' + esc(t.owner) + '</span>' +
     '<span style="flex:1;color:' + color + ';font-size:13px;">' + esc(t.title) + '</span>' +
     (opts.showPriority ? priorityTag(t.priority) : '') +
     (dueText ? '<span style="flex-shrink:0;color:' + (overdue ? '#A85560' : '#857A69') + ';font-size:12px;">' + dueText + '</span>' : '') +
@@ -519,13 +518,14 @@ function renderTasks() {
   var pills = ['All', 'Elva', 'Laura'].map(function (f) {
     var active = taskFilter === f;
     var activeBg = f === 'All' ? '#B8DFFF' : OWNER_COLORS[f].chip;
+    var activeText = f === 'All' ? '#453E33' : OWNER_COLORS[f].text;
     var dot = f === 'All' ? '' :
       '<span style="display:inline-block;width:9px;height:9px;border-radius:5px;background:' + OWNER_COLORS[f].chip + ';margin-right:7px;' +
-      (active ? 'border:1px solid #453E33;' : '') + '"></span>';
+      (active ? 'border:1px solid ' + activeText + ';' : '') + '"></span>';
     return '<button data-filter="' + f + '" style="padding:6px 18px;font-family:Arial,sans-serif;font-size:13px;' +
       (active ? 'font-weight:bold;' : '') +
       'border:1px solid ' + (active ? activeBg : '#C4B8A8') + ';border-radius:16px;' +
-      'background:' + (active ? activeBg : '#F7F3EC') + ';color:' + (active ? '#453E33' : '#5E564A') + ';cursor:pointer;">' +
+      'background:' + (active ? activeBg : '#F7F3EC') + ';color:' + (active ? activeText : '#5E564A') + ';cursor:pointer;">' +
       dot + (f === 'All' ? 'All tasks' : f) + '</button>';
   }).join('');
   var filterRow = '<div style="display:flex;gap:8px;margin-top:18px;">' + pills + '</div>';
