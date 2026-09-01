@@ -691,6 +691,54 @@ function renderClients() {
 }
 
 /* ─── Prospects ─────────────────────────────────────────────────────────── */
+var prospectView = 'pipeline'; /* or 'sheet' */
+
+function prospectsCsv() {
+  var head = ['First contact', 'Name', 'Business', 'Who reached out', 'Channel', 'How they heard of us', 'Looking for', 'Status', 'Last contact', 'Next action', 'Went ahead', 'Why not', 'Notes'];
+  var rows = state.prospects.map(function (p) {
+    return [p.firstContact || '', p.name || '', p.business || '', p.direction || '', p.channel || '',
+      p.heardAbout === 'Not asked yet' ? '' : (p.heardAbout || ''), p.lookingFor || '', p.status || '',
+      p.lastContact || '', p.nextAction || '',
+      p.status === 'Won' ? 'Yes' : (p.status === 'Lost' ? 'No' : ''), p.lostReason || '', p.notes || ''];
+  });
+  return [head].concat(rows).map(function (r) {
+    return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(',');
+  }).join('\r\n');
+}
+
+function prospectSheet() {
+  var th = 'padding:8px 10px;font-size:11px;font-weight:bold;color:#5E564A;text-align:left;border-bottom:1px solid #C4B8A8;white-space:nowrap;background:#EBE4D9;';
+  var td = 'padding:7px 10px;font-size:12px;color:#453E33;border-bottom:1px solid #DDD3C4;vertical-align:top;';
+  var tdMut = td + 'color:#857A69;';
+  var cols = ['First contact', 'Name', 'Business', 'Who reached out', 'Channel', 'Heard about us', 'Looking for', 'Status', 'Last contact', 'Next action', 'Went ahead?', 'Why not'];
+  var head = '<tr>' + cols.map(function (c) { return '<th style="' + th + '">' + c + '</th>'; }).join('') + '</tr>';
+  var rows = state.prospects.slice().sort(function (a, b) {
+    return (b.firstContact || '') < (a.firstContact || '') ? -1 : 1;
+  }).map(function (p) {
+    var flagged = isQuietProspect(p);
+    var went = p.status === 'Won' ? 'Yes' : (p.status === 'Lost' ? 'No' : '—');
+    var clip = 'max-width:170px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    return '<tr data-prospect="' + esc(p.id) + '" style="cursor:pointer;">' +
+      '<td style="' + tdMut + 'white-space:nowrap;">' + (p.firstContact ? fmtDate(p.firstContact) : '—') + '</td>' +
+      '<td style="' + td + 'font-weight:bold;white-space:nowrap;">' + esc(p.name) + '</td>' +
+      '<td style="' + td + 'white-space:nowrap;">' + esc(p.business || '') + '</td>' +
+      '<td style="' + tdMut + 'white-space:nowrap;">' + esc(p.direction || '') + '</td>' +
+      '<td style="' + tdMut + 'white-space:nowrap;">' + esc(p.channel || '') + '</td>' +
+      '<td style="' + tdMut + 'white-space:nowrap;">' + esc(p.heardAbout === 'Not asked yet' ? '—' : (p.heardAbout || '—')) + '</td>' +
+      '<td style="' + td + clip + '" title="' + esc(p.lookingFor || '') + '">' + esc(p.lookingFor || '—') + '</td>' +
+      '<td style="' + td + 'white-space:nowrap;">' + esc(p.status || '') + '</td>' +
+      '<td style="' + (flagged ? td + 'color:#A85560;' : tdMut) + 'white-space:nowrap;">' + (p.lastContact ? fmtDate(p.lastContact) : '—') + (flagged ? ' ·  quiet' : '') + '</td>' +
+      '<td style="' + tdMut + clip + '" title="' + esc(p.nextAction || '') + '">' + esc(p.nextAction || '—') + '</td>' +
+      '<td style="' + td + 'white-space:nowrap;' + (went === 'No' ? 'color:#A85560;' : (went === 'Yes' ? '' : 'color:#857A69;')) + '">' + went + '</td>' +
+      '<td style="' + tdMut + clip + '" title="' + esc(p.lostReason || '') + '">' + esc(p.lostReason || '—') + '</td>' +
+      '</tr>';
+  }).join('');
+  return '<div style="margin-top:18px;background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;overflow-x:auto;">' +
+    '<table style="border-collapse:collapse;width:100%;min-width:1100px;background:#F7F3EC;">' + head + rows + '</table>' +
+    '</div>' +
+    '<p style="color:#857A69;font-size:12px;margin-top:8px;">Click a row to fill in or fix anything. The CSV opens straight in Excel or Google Sheets.</p>';
+}
+
 function renderProspects() {
   var quiet = state.prospects.filter(isQuietProspect).length;
   var inPlay = state.prospects.filter(function (p) { return p.status !== 'Won' && p.status !== 'Lost'; }).length;
@@ -703,6 +751,18 @@ function renderProspects() {
     (state.prospects.length ? inPlay + ' in play' + (quiet ? ' · <span style="color:#A85560;">' + quiet + ' quiet for 3+ weeks</span>' : '') : 'The outreach pipeline lives here.') +
     '</p></div>' +
     '<button data-add-prospect style="padding:9px 18px;font-family:Arial,sans-serif;font-size:14px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Add a prospect</button>' +
+    '</div>';
+
+  var viewPills = '<div style="display:flex;align-items:center;gap:8px;margin-top:16px;">' +
+    ['pipeline', 'sheet'].map(function (v) {
+      var active = prospectView === v;
+      return '<button data-pview="' + v + '" style="padding:6px 18px;font-family:Arial,sans-serif;font-size:13px;' +
+        (active ? 'font-weight:bold;' : '') +
+        'border:1px solid ' + (active ? '#B8DFFF' : '#C4B8A8') + ';border-radius:16px;' +
+        'background:' + (active ? '#B8DFFF' : '#F7F3EC') + ';color:' + (active ? '#453E33' : '#5E564A') + ';cursor:pointer;">' +
+        (v === 'pipeline' ? 'Pipeline' : 'Sheet') + '</button>';
+    }).join('') +
+    (state.prospects.length ? '<button data-dl-csv style="margin-left:auto;padding:6px 14px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Download CSV</button>' : '') +
     '</div>';
 
   if (state.prospects.length === 0) {
@@ -734,7 +794,8 @@ function renderProspects() {
       '<span style="color:#857A69;font-family:Arial,sans-serif;font-size:12px;"> · ' + ps.length + '</span>' + hint + '</h2>' + rows + '</section>';
   }).join('');
 
-  return header + '<div style="margin-top:10px;">' + groups + '</div>';
+  if (prospectView === 'sheet') return header + viewPills + prospectSheet();
+  return header + viewPills + '<div style="margin-top:2px;">' + groups + '</div>';
 }
 
 /* ─── Content calendar ──────────────────────────────────────────────────── */
@@ -1557,10 +1618,15 @@ var FORM_SPECS = {
     fields: [
       { k: 'name', label: 'Name', type: 'text', half: true },
       { k: 'business', label: 'Business', type: 'text', half: true },
+      { k: 'direction', label: 'Who reached out first?', type: 'select', options: ['They reached out', 'We reached out'], half: true },
       { k: 'channel', label: 'Channel', type: 'select', options: CHANNELS, half: true },
+      { k: 'heardAbout', label: 'How did they hear about us?', type: 'select', options: ['Not asked yet', 'Word of mouth', 'Through a friend', 'Saw us on Instagram', 'Found us on Google', 'The enquiry form', 'Other'], half: true },
+      { k: 'firstContact', label: 'Date of first contact', type: 'date', half: true },
+      { k: 'lookingFor', label: 'What were they initially looking for?', type: 'text' },
       { k: 'status', label: 'Status', type: 'select', options: PSTATUSES, half: true },
       { k: 'lastContact', label: 'Last contact', type: 'date', half: true },
-      { k: 'nextAction', label: 'Next action', type: 'text', half: true },
+      { k: 'nextAction', label: 'Next action', type: 'text' },
+      { k: 'lostReason', label: 'If they didn’t go ahead — why not?', type: 'text' },
       { k: 'notes', label: 'Notes', type: 'textarea' }
     ]
   },
@@ -1972,7 +2038,13 @@ document.getElementById('main').addEventListener('click', function (e) {
     return;
   }
   if (e.target.closest && e.target.closest('[data-add-client]')) { openForm('client', null); return; }
-  if (e.target.closest && e.target.closest('[data-add-prospect]')) { openForm('prospect', null); return; }
+  if (e.target.closest && e.target.closest('[data-add-prospect]')) { openForm('prospect', null, { firstContact: todayStr(), lastContact: todayStr() }); return; }
+  var pview = e.target.closest ? e.target.closest('[data-pview]') : null;
+  if (pview) { prospectView = pview.getAttribute('data-pview'); render(); return; }
+  if (e.target.closest && e.target.closest('[data-dl-csv]')) {
+    saveFile('The Suede Studio - prospects.csv', prospectsCsv());
+    return;
+  }
   if (e.target.closest && e.target.closest('[data-add-content]')) { openForm('content', null, { date: todayStr() }); return; }
   if (e.target.closest && e.target.closest('[data-month-prev]')) { shiftContentMonth(-1); render(); return; }
   if (e.target.closest && e.target.closest('[data-month-next]')) { shiftContentMonth(1); render(); return; }
