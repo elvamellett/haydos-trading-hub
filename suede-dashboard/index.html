@@ -1257,9 +1257,31 @@ function renderOnboarding() {
     '<li>Proposals are always exactly three options: entry point, recommendation, full job</li>' +
     '</ul></div></div>';
 
+  /* The work, step by step — lane run-sheets */
+  function runSheetCard(title, sub, sheet, btnAttr, btnLabel) {
+    var steps = sheet.map(function (s, i) {
+      return '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #DDD3C4;">' +
+        '<span style="flex-shrink:0;width:22px;height:22px;border-radius:11px;background:#B8DFFF;color:#453E33;font-size:12px;line-height:22px;text-align:center;">' + (i + 1) + '</span>' +
+        '<div><div style="font-size:13px;font-weight:bold;color:#453E33;">' + s[0] + '</div>' +
+        '<div style="font-size:12px;color:#5E564A;margin-top:2px;">' + s[1] + '</div></div></div>';
+    }).join('');
+    return '<div style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:10px;padding:16px 18px;">' +
+      '<div style="font-family:Georgia,serif;font-size:16px;color:#453E33;">' + title + '</div>' +
+      '<div style="font-size:12px;color:#857A69;margin:2px 0 8px;">' + sub + '</div>' +
+      steps +
+      '<button ' + btnAttr + ' style="margin-top:12px;padding:6px 14px;font-family:Arial,sans-serif;font-size:12px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">' + btnLabel + '</button>' +
+      '</div>';
+  }
+  var runSheets =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px;">' +
+    runSheetCard('Before and around a shoot', 'Laura’s lane — the client hears exactly what the day looks like.', SHOOT_SHEET, 'data-prep="shoot"', 'Put the shoot prep on the board') +
+    runSheetCard('The ecommerce work plan', 'Elva’s lane — the plan, the order, and the if-time-runs-out rule, agreed before work starts.', ECOM_SHEET, 'data-prep="ecom"', 'Put the work plan on the board') +
+    '</div>';
+
   return header +
     sectionCard('Live onboardings', runnersHead + runners, 'Tick each client through the eight steps below.') +
     sectionCard('The process, start to finish', '<div style="margin-top:6px;">' + stepsHtml + '</div>') +
+    sectionCard('The work, step by step', runSheets, 'The little steps inside “the work” — each button drops the dated prep tasks straight onto the task board.') +
     sectionCard('Who we are and what we do', whoHtml) +
     sectionCard('Packages and pricing', lanesHtml + aiHtml +
       '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;"><h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Add-ons</h3>' + addonChips + '</div>' +
@@ -1273,11 +1295,54 @@ function renderOnboarding() {
       '<button data-dl-deck="pack" style="padding:8px 16px;font-family:Arial,sans-serif;font-size:13px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">The full onboarding pack</button>' +
       '<button data-dl-deck="who" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Who we are</button>' +
       '<button data-dl-deck="process" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">The process</button>' +
+      '<button data-dl-deck="expect" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">What to expect</button>' +
       '<button data-dl-deck="packages" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Packages &amp; pricing</button>' +
       '<button data-dl-deck="paperwork" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">The paperwork</button>' +
       '</div>',
       'PDFs in the studio look, ready to send to a client — the whole pack in one, or piece by piece.') +
     quoteBar;
+}
+
+/* ─── Lane run-sheets: the little steps inside “the work” ───────────────── */
+var SHOOT_SHEET = [
+  ['A week out — the inspiration deck', 'Laura sends the content inspiration deck: the look we’re going for, reference reels, and the shot list — so nothing on the day is a surprise.'],
+  ['The walk-through', 'Explain in detail what we’re looking for, what we’ll be shooting, and how we work on the day — how long it takes, what gets filmed in what order, and who needs to be there.'],
+  ['The day before', 'Confirm time and place, and send the get-ready list: products out, the space tidy, outfits picked, anything that needs charging charged.'],
+  ['On the day', 'Shot list first, bonus content after. Laura directs — the client doesn’t need to perform.'],
+  ['After', 'Edits over for review within the agreed turnaround, one revision round, then handover with advice on how to post it.']
+];
+
+var ECOM_SHEET = [
+  ['The plan first', 'Before touching anything, the client gets the plan: this is what I’ll tackle, in order — biggest revenue impact first — and this is what fits in the block of hours they’ve bought.'],
+  ['The time rule, agreed up front', 'If something takes longer than planned: the priorities get finished first, and anything that doesn’t fit gets listed at the end with exactly where it stands and what it needs. Nothing gets left half-done on a live site.'],
+  ['While the work runs', 'Short progress notes as things ship — and nothing that could break the shop goes live without a heads-up.'],
+  ['Mid-point', 'A quick check-in: what’s done, what’s next, anything at risk.'],
+  ['Wrap-up', 'What’s finished, what isn’t and why, and the handover note with how to run it from here.']
+];
+
+function addDays(iso, n) {
+  var p = iso.split('-');
+  var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10) + n);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function shootPrepTasks(client, day) {
+  return [
+    ['Send ' + client + ' the content inspiration deck — the look, references and shot list', 'Laura', 'P2', addDays(day, -7)],
+    ['Walk ' + client + ' through the shoot — what we’re looking for and how the day runs', 'Laura', 'P2', addDays(day, -5)],
+    ['Confirm shoot details with ' + client + ' — time, place, get-ready list', 'Laura', 'P1', addDays(day, -1)],
+    ['Shoot day at ' + client, 'Laura', 'P1', day],
+    ['Edits from the ' + client + ' shoot over for review', 'Laura', 'P2', addDays(day, 7)]
+  ];
+}
+
+function ecomPlanTasks(client, day) {
+  return [
+    ['Send ' + client + ' the work plan — what gets tackled first and the if-time-runs-out rule', 'Elva', 'P1', addDays(day, -2)],
+    ['Start the ' + client + ' work — priorities first', 'Elva', 'P2', day],
+    ['Mid-point check-in with ' + client + ' — done, next, at risk', 'Elva', 'P2', addDays(day, 7)],
+    ['Wrap-up note to ' + client + ' — finished, unfinished and how it gets handled', 'Elva', 'P2', addDays(day, 14)]
+  ];
 }
 
 /* ─── Downloads: branded PDFs (HTML fallback when jsPDF can't load) ─────── */
@@ -1478,9 +1543,26 @@ function docPaperwork() {
   return out;
 }
 
+function docExpect() {
+  var out = [
+    { t: 'h1', x: 'What to expect from the work' },
+    { t: 'p', x: 'The little steps inside the job, so you always know what’s coming.' },
+    { t: 'h2', x: 'If we’re shooting content' }
+  ];
+  SHOOT_SHEET.forEach(function (s, i) {
+    out.push({ t: 'row', k: (i + 1) + '. ' + s[0], v: '', d: s[1] });
+  });
+  out.push({ t: 'h2', x: 'If we’re working on your shop' });
+  ECOM_SHEET.forEach(function (s, i) {
+    out.push({ t: 'row', k: (i + 1) + '. ' + s[0], v: '', d: s[1] });
+  });
+  return out;
+}
+
 function docPack() {
   return docWho()
     .concat([{ t: 'pagebreak' }], docProcess())
+    .concat([{ t: 'pagebreak' }], docExpect())
     .concat([{ t: 'pagebreak' }], docPackages())
     .concat([{ t: 'pagebreak' }], docPaperwork());
 }
@@ -1606,6 +1688,20 @@ var FORM_SPECS = {
       { k: 'client', label: 'Client or business name', type: 'text' }
     ]
   },
+  shootprep: {
+    titleNew: 'Shoot prep — onto the board', titleEdit: 'Shoot prep', store: 'tasks', required: 'client',
+    fields: [
+      { k: 'client', label: 'Client', type: 'text', half: true },
+      { k: 'day', label: 'Shoot day', type: 'date', half: true }
+    ]
+  },
+  ecomprep: {
+    titleNew: 'Work plan — onto the board', titleEdit: 'Work plan', store: 'tasks', required: 'client',
+    fields: [
+      { k: 'client', label: 'Client', type: 'text', half: true },
+      { k: 'day', label: 'Start date', type: 'date', half: true }
+    ]
+  },
   selection: {
     titleNew: 'Save this selection for a client', titleEdit: 'Edit saved selection', store: 'selections', required: 'client',
     fields: [
@@ -1719,6 +1815,24 @@ document.getElementById('g-save').addEventListener('click', function () {
   if (spec.required && !values[spec.required]) {
     var req = document.querySelector('#g-body [data-f="' + spec.required + '"]');
     if (req) { req.style.borderColor = '#A85560'; req.focus(); }
+    return;
+  }
+  /* Prep forms create dated tasks on the board instead of a record */
+  if (gForm.type === 'shootprep' || gForm.type === 'ecomprep') {
+    var day = values.day || todayStr();
+    var defs = gForm.type === 'shootprep' ? shootPrepTasks(values.client, day) : ecomPlanTasks(values.client, day);
+    defs.forEach(function (d, di) {
+      state.tasks.push({
+        id: 'prep-' + Date.now() + '-' + di,
+        title: d[0], owner: d[1], client: values.client, priority: d[2], due: d[3],
+        notes: gForm.type === 'shootprep' ? 'Shoot prep' : 'Work plan',
+        status: 'todo', doneDate: null
+      });
+    });
+    closeForm();
+    saveState(state);
+    location.hash = '#/tasks';
+    render();
     return;
   }
   /* Saving a selection snapshots the current picker; same client name = update */
@@ -1994,6 +2108,7 @@ document.getElementById('main').addEventListener('click', function (e) {
     var which = dlDeck.getAttribute('data-dl-deck');
     if (which === 'who') downloadDoc('The Suede Studio — who we are', docWho());
     else if (which === 'process') downloadDoc('The Suede Studio — how onboarding works', docProcess());
+    else if (which === 'expect') downloadDoc('The Suede Studio — what to expect from the work', docExpect());
     else if (which === 'packages') downloadDoc('The Suede Studio — packages and pricing', docPackages());
     else if (which === 'paperwork') downloadDoc('The Suede Studio — what you sign and get', docPaperwork());
     else downloadDoc('The Suede Studio — onboarding pack', docPack());
@@ -2011,6 +2126,11 @@ document.getElementById('main').addEventListener('click', function (e) {
   if (e.target.closest && e.target.closest('[data-custom-add]')) {
     customMix.added = !customMix.added;
     render();
+    return;
+  }
+  var prep = e.target.closest ? e.target.closest('[data-prep]') : null;
+  if (prep) {
+    openForm(prep.getAttribute('data-prep') === 'shoot' ? 'shootprep' : 'ecomprep', null, { day: addDays(todayStr(), 7) });
     return;
   }
   if (e.target.closest && e.target.closest('[data-save-selection]')) { openForm('selection', null); return; }
