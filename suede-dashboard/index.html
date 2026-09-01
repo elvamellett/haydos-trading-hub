@@ -876,6 +876,103 @@ var ADDONS = [
 
 var quoteSel = {}; /* selected package/add-on keys — a scratch pad, not saved */
 
+/* Custom mix calculator — prices in-between quantities from the ladders.
+   Video ladder €120(1)/€320(3)/€500(5)/€760(8); hours €195(5)/€370(10)/
+   €700(20)/€960(30). Between rungs: straight-line interpolation. Below the
+   first rung: the first rung's unit rate. Above the top rung: the top run
+   of the ladder's marginal rate. */
+var customMix = { videos: 0, hours: 0, added: false };
+var VIDEO_RUNGS = [[1, 120], [3, 320], [5, 500], [8, 760]];
+var HOUR_RUNGS = [[5, 195], [10, 370], [20, 700], [30, 960]];
+
+function ladderPrice(rungs, qty, underRate, overRate) {
+  if (qty <= 0) return 0;
+  if (qty <= rungs[0][0]) return qty * underRate;
+  var top = rungs[rungs.length - 1];
+  if (qty >= top[0]) return top[1] + (qty - top[0]) * overRate;
+  for (var i = 0; i < rungs.length - 1; i++) {
+    var a = rungs[i], b = rungs[i + 1];
+    if (qty > a[0] && qty <= b[0]) {
+      return a[1] + (b[1] - a[1]) * (qty - a[0]) / (b[0] - a[0]);
+    }
+  }
+  return 0;
+}
+
+function round5(x) { return Math.round(x / 5) * 5; }
+function videosPrice(n) { return round5(ladderPrice(VIDEO_RUNGS, n, 120, (760 - 500) / 3)); }
+function hoursPrice(h) { return round5(ladderPrice(HOUR_RUNGS, h, 39, 32)); }
+
+/* Duo saving scales like the menu: €55 off €515 (~11%) up to €290 off €1,460 (~20%) */
+function duoPct(separate) {
+  var pct = 10.7 + (separate - 515) * (19.9 - 10.7) / (1460 - 515);
+  return Math.max(10.7, Math.min(19.9, pct));
+}
+
+function customTotal() {
+  var v = videosPrice(customMix.videos);
+  var h = hoursPrice(customMix.hours);
+  var sep = v + h;
+  if (customMix.videos > 0 && customMix.hours > 0) return round5(sep * (1 - duoPct(sep) / 100));
+  return sep;
+}
+
+function customResultHtml() {
+  var nv = customMix.videos, nh = customMix.hours;
+  if (!nv && !nh) {
+    return '<p style="color:#857A69;font-size:13px;">Set videos and hours and the maths appears here — even for a mix that isn’t on the menu.</p>';
+  }
+  var rows = [];
+  if (nv) {
+    var vp = videosPrice(nv);
+    rows.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#453E33;padding:3px 0;">' +
+      '<span>' + nv + ' video' + (nv === 1 ? '' : 's') + ' <span style="color:#857A69;">· ' + euro(Math.round(vp / nv)) + ' a video, from the ladder</span></span>' +
+      '<span>' + euro(vp) + '</span></div>');
+  }
+  if (nh) {
+    var hp = hoursPrice(nh);
+    var rate = hp / nh;
+    var floorFlag = rate < 35
+      ? ' <span style="color:#A85560;">· under the €35/hr floor — fine on the 30-hour block, flag anything else</span>'
+      : '';
+    rows.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#453E33;padding:3px 0;">' +
+      '<span>' + nh + ' hour' + (nh === 1 ? '' : 's') + ' of ecommerce <span style="color:#857A69;">· ' + euro(Math.round(rate)) + '/hr</span>' + floorFlag + '</span>' +
+      '<span>' + euro(hp) + '</span></div>');
+  }
+  var sep = videosPrice(nv) + hoursPrice(nh);
+  var total = customTotal();
+  if (nv && nh) {
+    var pct = duoPct(sep);
+    rows.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#857A69;padding:3px 0;border-top:1px solid #DDD3C4;margin-top:4px;">' +
+      '<span>Booked separately</span><span>' + euro(sep) + '</span></div>');
+    rows.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;color:#453E33;padding:3px 0;">' +
+      '<span>Duo saving, like the menu’s <span style="color:#857A69;">· about ' + Math.round(pct) + '% off</span></span>' +
+      '<span>−' + euro(sep - total) + '</span></div>');
+  }
+  rows.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:14px;font-weight:bold;color:#453E33;padding:6px 0 3px;border-top:1px solid #C4B8A8;margin-top:4px;">' +
+    '<span>Rough price</span><span>' + euro(total) + '</span></div>');
+  rows.push('<p style="color:#857A69;font-size:12px;margin-top:6px;">A guide from the standard ladders, plus the €150 onboarding fee' + (total > 500 ? ' (credited back over €500)' : '') + '. Elva shapes the final number.</p>');
+  return rows.join('');
+}
+
+function customCalcHtml() {
+  var inputStyle = 'width:90px;padding:7px 10px;font-family:Arial,sans-serif;font-size:14px;border:1px solid #C4B8A8;border-radius:6px;background:#FFFCF5;color:#453E33;outline:none;';
+  return '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;">' +
+    '<h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Tailor a mix</h3>' +
+    '<p style="color:#857A69;font-size:13px;margin-top:4px;">For the client who wants something between the packages — any number of videos and hours, priced off the same ladders.</p>' +
+    '<div style="display:grid;grid-template-columns:230px 1fr;gap:20px;margin-top:12px;align-items:start;">' +
+    '<div style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:8px;padding:12px 14px;">' +
+    '<label style="display:block;font-size:13px;color:#5E564A;margin-bottom:4px;">Videos (Laura)</label>' +
+    '<input type="number" min="0" max="30" step="1" data-custom="videos" value="' + customMix.videos + '" style="' + inputStyle + '">' +
+    '<label style="display:block;font-size:13px;color:#5E564A;margin:12px 0 4px;">Ecommerce hours (Elva)</label>' +
+    '<input type="number" min="0" max="60" step="1" data-custom="hours" value="' + customMix.hours + '" style="' + inputStyle + '">' +
+    '<button data-custom-add style="margin-top:14px;padding:7px 14px;font-family:Arial,sans-serif;font-size:13px;border:none;border-radius:6px;background:' + (customMix.added ? '#B8DFFF' : '#6E5B44') + ';color:' + (customMix.added ? '#453E33' : '#F7F3EC') + ';cursor:pointer;">' +
+    (customMix.added ? '✓ In the selection' : 'Add to selection') + '</button>' +
+    '</div>' +
+    '<div id="custom-result" style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:8px;padding:12px 16px;">' + customResultHtml() + '</div>' +
+    '</div></div>';
+}
+
 function euro(n) {
   return '€' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
@@ -992,6 +1089,9 @@ function renderOnboarding() {
 
   /* Quote bar */
   var selItems = allQuoteItems().filter(function (i) { return quoteSel[i.k]; });
+  if (customMix.added && (customMix.videos > 0 || customMix.hours > 0)) {
+    selItems.push({ k: '__custom', name: 'Custom mix', price: customTotal(), per: 'once' });
+  }
   var quoteBar = '';
   if (selItems.length) {
     var once = 0, monthly = 0;
@@ -1044,7 +1144,8 @@ function renderOnboarding() {
     sectionCard('The process, start to finish', '<div style="margin-top:6px;">' + stepsHtml + '</div>') +
     sectionCard('Who we are and what we do', whoHtml) +
     sectionCard('Packages and pricing', lanesHtml + aiHtml +
-      '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;"><h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Add-ons</h3>' + addonChips + '</div>',
+      '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;"><h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Add-ons</h3>' + addonChips + '</div>' +
+      customCalcHtml(),
       'Standard list prices — click to pick and choose; the total builds itself. Small business and friends &amp; family rates exist and get applied by Elva, case by case.') +
     sectionCard('What they sign and get', '<div style="margin-top:6px;">' + papers + '</div>', 'Templates live in the studio Drive — this is what each one has to cover.') +
     sectionCard('Standing terms', terms) +
@@ -1347,6 +1448,20 @@ document.getElementById('main').addEventListener('drop', function (e) {
   persistAndRender();
 });
 
+/* Custom mix inputs — live maths on every keystroke, full re-render on blur
+   so the quote bar catches up without stealing focus mid-typing */
+document.getElementById('main').addEventListener('input', function (e) {
+  var f = e.target.closest ? e.target.closest('[data-custom]') : null;
+  if (!f) return;
+  var v = Math.max(0, Math.floor(parseFloat(f.value) || 0));
+  customMix[f.getAttribute('data-custom')] = v;
+  var box = document.getElementById('custom-result');
+  if (box) box.innerHTML = customResultHtml();
+});
+document.getElementById('main').addEventListener('change', function (e) {
+  if (e.target.closest && e.target.closest('[data-custom]') && customMix.added) render();
+});
+
 /* Card hover — pale blue border, set inline so no class is involved */
 document.getElementById('main').addEventListener('mouseover', function (e) {
   var card = e.target.closest ? e.target.closest('[data-card]') : null;
@@ -1402,7 +1517,17 @@ document.getElementById('main').addEventListener('click', function (e) {
     render();
     return;
   }
-  if (e.target.closest && e.target.closest('[data-quote-clear]')) { quoteSel = {}; render(); return; }
+  if (e.target.closest && e.target.closest('[data-custom-add]')) {
+    customMix.added = !customMix.added;
+    render();
+    return;
+  }
+  if (e.target.closest && e.target.closest('[data-quote-clear]')) {
+    quoteSel = {};
+    customMix.added = false;
+    render();
+    return;
+  }
   if (e.target.closest && e.target.closest('[data-add-client]')) { openForm('client', null); return; }
   if (e.target.closest && e.target.closest('[data-add-prospect]')) { openForm('prospect', null); return; }
   if (e.target.closest && e.target.closest('[data-add-content]')) { openForm('content', null, { date: todayStr() }); return; }
