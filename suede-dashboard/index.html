@@ -152,6 +152,7 @@ h1, h2, h3 { font-family: Georgia, serif; font-weight: normal; }
     <a href="#/content" data-nav="content">Content</a>
     <a href="#/clients" data-nav="clients">Clients</a>
     <a href="#/prospects" data-nav="prospects">Prospects</a>
+    <a href="#/onboarding" data-nav="onboarding">Onboarding</a>
     <a href="#/hours" data-nav="hours">Hours</a>
     <a href="#/capacity" data-nav="capacity">Capacity</a>
     <a href="#/invoices" data-nav="invoices">Invoices</a>
@@ -308,6 +309,7 @@ if (!state || !state.tasks) state = { tasks: seedTasks() };
 if (!state.clients) state.clients = [];
 if (!state.prospects) state.prospects = [];
 if (!state.content) state.content = [];
+if (!state.onboardings) state.onboardings = [];
 saveState(state);
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -805,6 +807,250 @@ function renderContent() {
     note;
 }
 
+/* ─── Onboarding ────────────────────────────────────────────────────────── */
+var ONBOARD_STEPS = [
+  ['The enquiry lands', 'Website form, DM or referral — add them to Prospects the same day. Behind the scenes the audit of their website and socials gets run and the discovery question sheet gets built, so the homework exists before the call.'],
+  ['The discovery call', 'Booked around the day jobs — evenings and weekend mornings. Run the tailored question sheet, listen more than pitch, and leave knowing their goals, their budget shape, and which price list applies.'],
+  ['The proposal', 'Three options, out within 48 hours of the call: an entry point, the recommendation, and the full job. Every option shows the maths line by line. Follow up if it goes quiet.'],
+  ['The yes', 'They pick their option — mixed and matched from the menu below. They sign the service agreement and pay the €150 onboarding fee plus the 50% deposit. Retainers are billed monthly in advance instead.'],
+  ['The production brief', 'They fill in the Production Brief form: brand assets, the logins we need, product info, who signs things off. Answers go into their notes on the Clients page, the Drive folder gets set up, and they move from Prospects to Clients as Onboarding.'],
+  ['Kickoff', 'A short kickoff call. The project plan gets real dates built around the 9–5 blackout and lands in the studio calendar — the deadlines and the work blocks in front of them.'],
+  ['The work', 'Stage moves to Active. Build, shoot, edit, with a mid-point review to keep it honest. The boundary stays firm: we build it, you run it.'],
+  ['Handover and review', 'Deliverables handed over with the how-to-run-it notes, balance invoice out, and ask for the Google review while they’re delighted. Retainer clients settle into the monthly one-hour review call; everyone else moves to Delivered.']
+];
+
+var PKG_LANES = [
+  {
+    lane: 'Content — Laura’s lane',
+    note: 'Once-off video ladder: €120 (1) · €320 (3) · €500 (5) · €760 (8).',
+    items: [
+      { k: 'c-taster', name: 'The Taster', price: 320, per: 'once', desc: '3 videos, once-off — a first taste of working together.' },
+      { k: 'c-feed', name: 'The Feed', price: 500, per: 'once', desc: '5 videos, once-off.' },
+      { k: 'c-launch', name: 'The Launch', price: 900, per: 'once', desc: '8 videos, once-off, shaped around a launch.' },
+      { k: 'c-alwayson', name: 'The Always-On', price: 480, per: 'mo', desc: '6 pieces a month on retainer.' },
+      { k: 'c-signature', name: 'The Signature', price: 870, per: 'mo', desc: '12 pieces a month plus the monthly content calendar.' }
+    ]
+  },
+  {
+    lane: 'Ecommerce — Elva’s lane',
+    note: 'Hours ladder: €195 (5) · €370 (10) · €700 (20) · €960 (30). Ecommerce is normally a project, not a retainer — Upkeep is for genuine ongoing need only.',
+    items: [
+      { k: 'e-refresh', name: 'Refresh', price: 370, per: 'once', desc: '10 hours of fixes and polish on the site you have.' },
+      { k: 'e-revamp', name: 'Revamp', price: 960, per: 'once', desc: '30 hours — the full clean-up, done properly.' },
+      { k: 'e-showcase', name: 'Build — Showcase', price: 1000, per: 'once', desc: 'A polished brochure site.' },
+      { k: 'e-starter', name: 'Build — Starter Store', price: 1400, per: 'once', desc: 'A first store, live and selling.' },
+      { k: 'e-sigstore', name: 'Build — Signature Store', price: 2400, per: 'once', desc: 'A full store, built out properly.' },
+      { k: 'e-flagship', name: 'Build — Flagship Store', price: 4200, per: 'once', desc: 'The big build — everything scoped in.' },
+      { k: 'e-upkeep', name: 'Upkeep', price: 680, per: 'mo', desc: '20 hours a month for stores that keep moving.' },
+      { k: 'e-upkeepplus', name: 'Upkeep+', price: 1160, per: 'mo', desc: '36 hours a month, priority turnaround.' }
+    ]
+  },
+  {
+    lane: 'The Duo — both lanes together',
+    note: 'The once-off Duos save €55, €130 and €290 against booking the lanes separately.',
+    items: [
+      { k: 'd-intro', name: 'Duo Intro', price: 460, per: 'once', desc: '3 videos + 5 hours.' },
+      { k: 'd-growth', name: 'Duo Growth', price: 740, per: 'once', desc: '5 videos + 10 hours.' },
+      { k: 'd-full', name: 'Duo Full', price: 1170, per: 'once', desc: '8 videos + 20 hours.' },
+      { k: 'd-sub', name: 'Duo Subscription', price: 1020, per: 'mo', desc: '6 videos + 20 hours, monthly.' },
+      { k: 'd-subplus', name: 'Duo Subscription+', price: 1740, per: 'mo', desc: '12 videos + 30 hours, monthly.' }
+    ]
+  }
+];
+
+var ADDONS = [
+  { k: 'a-shoot', name: 'Extra shoot day', price: 300, group: 'Content' },
+  { k: 'a-reel', name: 'Reel from your footage', price: 60, group: 'Content' },
+  { k: 'a-calendar', name: 'Content calendar', price: 150, group: 'Content' },
+  { k: 'a-captions', name: 'Caption pack', price: 80, group: 'Content' },
+  { k: 'a-stories', name: 'Story templates', price: 120, group: 'Content' },
+  { k: 'a-rush', name: 'Rush edit', price: 50, group: 'Content' },
+  { k: 'a-logo', name: 'Logo', price: 300, group: 'Ecommerce' },
+  { k: 'a-page', name: 'Extra page', price: 120, group: 'Ecommerce' },
+  { k: 'a-booking', name: 'Booking system', price: 200, group: 'Ecommerce' },
+  { k: 'a-blog', name: 'Blog setup', price: 150, group: 'Ecommerce' },
+  { k: 'a-product', name: 'Extra product (each)', price: 6, group: 'Ecommerce' },
+  { k: 'a-migration', name: 'Platform migration (from)', price: 600, group: 'Ecommerce' },
+  { k: 'a-revision', name: 'Extra revision round', price: 150, group: 'Ecommerce' }
+];
+
+var quoteSel = {}; /* selected package/add-on keys — a scratch pad, not saved */
+
+function euro(n) {
+  return '€' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function allQuoteItems() {
+  var out = [];
+  PKG_LANES.forEach(function (l) { l.items.forEach(function (i) { out.push(i); }); });
+  ADDONS.forEach(function (a) { out.push({ k: a.k, name: a.name, price: a.price, per: 'once' }); });
+  return out;
+}
+
+function sectionCard(title, bodyHtml, sub) {
+  return '<section style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:20px 24px 18px;margin-top:18px;">' +
+    '<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:20px;color:#453E33;">' + title + '</h2>' +
+    (sub ? '<p style="color:#857A69;font-size:13px;margin-top:2px;">' + sub + '</p>' : '') +
+    bodyHtml + '</section>';
+}
+
+function renderOnboarding() {
+  var header =
+    '<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;color:#453E33;">Onboarding</h1>' +
+    '<p style="color:#857A69;font-size:14px;margin-top:2px;">Every new client walks the same road, whatever the lane — content, ecommerce, the Duo, or AI when it lands.</p>';
+
+  /* Live onboardings — one checklist per client mid-process */
+  var runners;
+  if (state.onboardings.length === 0) {
+    runners = emptyLine('Nobody mid-onboarding. When someone signs, start their checklist here and tick the steps off as you go.');
+  } else {
+    runners = '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:12px;">' +
+      state.onboardings.map(function (o) {
+        var steps = o.steps || [];
+        var done = 0;
+        for (var i = 0; i < ONBOARD_STEPS.length; i++) if (steps[i]) done++;
+        var pct = Math.round(done / ONBOARD_STEPS.length * 100);
+        var rows = ONBOARD_STEPS.map(function (s, i) {
+          var ticked = !!steps[i];
+          return '<div data-onb-step="' + esc(o.id) + ':' + i + '" style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;">' +
+            '<span style="flex-shrink:0;width:18px;height:18px;border-radius:9px;border:1px solid ' + (ticked ? '#B8DFFF' : '#C4B8A8') + ';background:' + (ticked ? '#B8DFFF' : '#F7F3EC') + ';color:#453E33;font-size:10px;line-height:18px;text-align:center;">' + (ticked ? '✓' : (i + 1)) + '</span>' +
+            '<span style="font-size:13px;color:' + (ticked ? '#857A69' : '#453E33') + ';">' + s[0] + '</span>' +
+            '</div>';
+        }).join('');
+        return '<div style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:10px;padding:14px 16px;">' +
+          '<div data-onb-edit="' + esc(o.id) + '" style="display:flex;align-items:center;gap:10px;cursor:pointer;">' +
+          '<span style="flex:1;font-family:Georgia,serif;font-size:16px;color:#453E33;">' + esc(o.client) + '</span>' +
+          '<span style="color:#857A69;font-size:12px;">' + done + ' of ' + ONBOARD_STEPS.length + '</span>' +
+          '</div>' +
+          '<div style="height:5px;border-radius:3px;background:#DDD3C4;overflow:hidden;margin:8px 0 10px;"><div style="width:' + pct + '%;height:5px;background:#B8DFFF;"></div></div>' +
+          rows + '</div>';
+      }).join('') + '</div>';
+  }
+  var runnersHead =
+    '<div style="display:flex;align-items:center;gap:16px;">' +
+    '<div style="flex:1;"></div>' +
+    '<button data-start-onb style="padding:8px 16px;font-family:Arial,sans-serif;font-size:13px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Start an onboarding</button>' +
+    '</div>';
+
+  /* The eight steps, in detail */
+  var stepsHtml = ONBOARD_STEPS.map(function (s, i) {
+    return '<div style="display:flex;gap:14px;padding:12px 0;border-bottom:1px solid #DDD3C4;">' +
+      '<span style="flex-shrink:0;width:26px;height:26px;border-radius:13px;background:#B8DFFF;color:#453E33;font-size:13px;line-height:26px;text-align:center;">' + (i + 1) + '</span>' +
+      '<div><div style="font-size:14px;font-weight:bold;color:#453E33;">' + s[0] + '</div>' +
+      '<div style="font-size:13px;color:#5E564A;margin-top:2px;">' + s[1] + '</div></div>' +
+      '</div>';
+  }).join('');
+
+  /* Who we are */
+  var whoHtml =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:12px;">' +
+    '<div>' +
+    '<p style="font-size:13px;color:#5E564A;">A two-person studio in Wicklow — thesuedestudio.com, @the.suede.studio.</p>' +
+    '<div style="margin-top:10px;padding:10px 12px;background:#F7F3EC;border:1px solid #DDD3C4;border-radius:8px;">' +
+    '<span style="font-size:13px;font-weight:bold;color:#453E33;">Elva — ecommerce.</span> <span style="font-size:13px;color:#5E564A;">Shopify, SEO, brand, website builds, Klaviyo. Logs in, fixes, polishes and builds.</span></div>' +
+    '<div style="margin-top:8px;padding:10px 12px;background:#F7F3EC;border:1px solid #DDD3C4;border-radius:8px;">' +
+    '<span style="font-size:13px;font-weight:bold;color:#453E33;">Laura — content and social.</span> <span style="font-size:13px;color:#5E564A;">Plans, shoots, edits and hands over, with advice on how to post it.</span></div>' +
+    '</div>' +
+    '<div style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:8px;padding:12px 14px;">' +
+    '<p style="font-family:Georgia,serif;font-size:15px;color:#453E33;">“We build it, you run it.”</p>' +
+    '<p style="font-size:13px;color:#5E564A;margin-top:6px;">The scope line every client needs to understand before they sign:</p>' +
+    '<p style="font-size:13px;color:#5E564A;margin-top:6px;">We don’t fulfil orders, chase customers or answer customer-service email. We don’t press post, run live stories, or answer DMs and comments — the client publishes. PR and influencer outreach are a separate conversation.</p>' +
+    '</div></div>';
+
+  /* Packages — selectable */
+  var lanesHtml = PKG_LANES.map(function (lane) {
+    var cards = lane.items.map(function (it) {
+      var sel = !!quoteSel[it.k];
+      return '<div data-pk="' + it.k + '" style="background:' + (sel ? '#B8DFFF' : '#F7F3EC') + ';border:1px solid ' + (sel ? '#B8DFFF' : '#DDD3C4') + ';border-radius:8px;padding:12px 14px;cursor:pointer;">' +
+        '<div style="display:flex;align-items:baseline;gap:8px;">' +
+        '<span style="flex:1;font-size:14px;font-weight:bold;color:#453E33;">' + it.name + '</span>' +
+        '<span style="font-family:Georgia,serif;font-size:15px;color:#453E33;">' + euro(it.price) + (it.per === 'mo' ? '/mo' : '') + '</span></div>' +
+        '<div style="font-size:12px;color:' + (sel ? '#453E33' : '#857A69') + ';margin-top:4px;">' + it.desc + '</div>' +
+        (sel ? '<div style="font-size:11px;font-weight:bold;color:#453E33;margin-top:6px;">✓ Selected</div>' : '') +
+        '</div>';
+    }).join('');
+    return '<div style="margin-top:16px;">' +
+      '<h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;padding-bottom:6px;border-bottom:1px solid #C4B8A8;">' + lane.lane + '</h3>' +
+      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px;">' + cards + '</div>' +
+      '<p style="color:#857A69;font-size:12px;margin-top:8px;">' + lane.note + '</p>' +
+      '</div>';
+  }).join('');
+
+  var aiHtml =
+    '<div style="margin-top:16px;">' +
+    '<h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;padding-bottom:6px;border-bottom:1px solid #C4B8A8;">AI</h3>' +
+    '<p style="color:#857A69;font-size:13px;margin-top:8px;">The AI package is being decided — it’s on the September board. What’s in it and what it costs lands here once it’s signed off.</p>' +
+    '</div>';
+
+  var addonChips = ['Content', 'Ecommerce'].map(function (g) {
+    var chips = ADDONS.filter(function (a) { return a.group === g; }).map(function (a) {
+      var sel = !!quoteSel[a.k];
+      return '<span data-pk="' + a.k + '" style="display:inline-block;background:' + (sel ? '#B8DFFF' : '#F7F3EC') + ';border:1px solid ' + (sel ? '#B8DFFF' : '#C4B8A8') + ';border-radius:14px;padding:4px 12px;font-size:12px;color:#453E33;cursor:pointer;margin:0 6px 6px 0;">' + (sel ? '✓ ' : '') + a.name + ' · ' + euro(a.price) + '</span>';
+    }).join('');
+    return '<div style="margin-top:10px;"><span style="font-size:12px;color:#857A69;">' + g + ':</span><div style="margin-top:6px;">' + chips + '</div></div>';
+  }).join('');
+
+  /* Quote bar */
+  var selItems = allQuoteItems().filter(function (i) { return quoteSel[i.k]; });
+  var quoteBar = '';
+  if (selItems.length) {
+    var once = 0, monthly = 0;
+    selItems.forEach(function (i) { if (i.per === 'mo') monthly += i.price; else once += i.price; });
+    var overFiveHundred = (once + monthly) > 500;
+    var parts = [];
+    if (once) parts.push(euro(once) + ' once-off');
+    if (monthly) parts.push(euro(monthly) + '/month');
+    quoteBar = '<div style="position:fixed;bottom:22px;right:26px;z-index:40;background:#6E5B44;color:#F7F3EC;border-radius:10px;padding:12px 18px;max-width:340px;">' +
+      '<div style="font-size:14px;font-weight:bold;">' + selItems.length + ' selected — ' + parts.join(' + ') + '</div>' +
+      '<div style="font-size:12px;margin-top:3px;">+ €150 onboarding fee' + (overFiveHundred ? ', credited back (over €500)' : '') + ' · standard list</div>' +
+      '<button data-quote-clear style="margin-top:8px;padding:4px 10px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #F7F3EC;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Clear selection</button>' +
+      '</div>';
+  }
+
+  /* Paperwork */
+  var papers = [
+    ['The proposal', 'The three options with the line-by-line maths. Word doc, saved to their Drive folder.'],
+    ['The service agreement', 'Scope (“we build it, you run it”), deliverables, revision rounds, payment terms, and who owns the work.'],
+    ['The deposit invoice', '50% up front, balance on completion. Retainers: first month billed in advance.'],
+    ['The onboarding fee', '€150 on every job, credited back against any package over €500.'],
+    ['The Production Brief', 'The form that gathers brand assets, logins, product info and sign-off names before any work starts.'],
+    ['The handover note', 'What was delivered, logins returned, and how to run it from here.']
+  ].map(function (d) {
+    return '<div style="display:flex;gap:12px;padding:9px 0;border-bottom:1px solid #DDD3C4;">' +
+      '<span style="flex-shrink:0;min-width:170px;font-size:13px;font-weight:bold;color:#453E33;">' + d[0] + '</span>' +
+      '<span style="font-size:13px;color:#5E564A;">' + d[1] + '</span></div>';
+  }).join('');
+
+  /* Standing terms */
+  var terms =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:12px;">' +
+    '<div><p style="font-size:13px;font-weight:bold;color:#453E33;">The client sees</p>' +
+    '<ul style="margin:8px 0 0 18px;font-size:13px;color:#5E564A;">' +
+    '<li style="margin-bottom:5px;">50% deposit up front, 50% on completion</li>' +
+    '<li style="margin-bottom:5px;">Retainers billed monthly in advance</li>' +
+    '<li style="margin-bottom:5px;">€150 onboarding fee, credited back over €500</li>' +
+    '<li style="margin-bottom:5px;">Retainer clients get a one-hour review call each month</li>' +
+    '<li>Turnaround subject to availability — work happens evenings and weekends</li>' +
+    '</ul></div>' +
+    '<div><p style="font-size:13px;font-weight:bold;color:#453E33;">Internal only</p>' +
+    '<ul style="margin:8px 0 0 18px;font-size:13px;color:#5E564A;">' +
+    '<li style="margin-bottom:5px;">Three price lists: standard, small business, friends &amp; family — one list per client, decided by Elva, never stacked</li>' +
+    '<li style="margin-bottom:5px;">Rate floor €35/hr — never break it to win a job; flag it instead</li>' +
+    '<li>Proposals are always exactly three options: entry point, recommendation, full job</li>' +
+    '</ul></div></div>';
+
+  return header +
+    sectionCard('Live onboardings', runnersHead + runners, 'Tick each client through the eight steps below.') +
+    sectionCard('The process, start to finish', '<div style="margin-top:6px;">' + stepsHtml + '</div>') +
+    sectionCard('Who we are and what we do', whoHtml) +
+    sectionCard('Packages and pricing', lanesHtml + aiHtml +
+      '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;"><h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Add-ons</h3>' + addonChips + '</div>',
+      'Standard list prices — click to pick and choose; the total builds itself. Small business and friends &amp; family rates exist and get applied by Elva, case by case.') +
+    sectionCard('What they sign and get', '<div style="margin-top:6px;">' + papers + '</div>', 'Templates live in the studio Drive — this is what each one has to cover.') +
+    sectionCard('Standing terms', terms) +
+    quoteBar;
+}
+
 /* ─── Generic record forms ──────────────────────────────────────────────── */
 var FORM_SPECS = {
   client: {
@@ -826,6 +1072,12 @@ var FORM_SPECS = {
       { k: 'retainer', label: 'On a retainer', type: 'check' },
       { k: 'driveLink', label: 'Drive folder link', type: 'text' },
       { k: 'notes', label: 'Notes — Production Brief answers live here', type: 'textarea' }
+    ]
+  },
+  onboard: {
+    titleNew: 'Start an onboarding', titleEdit: 'Edit onboarding', store: 'onboardings', required: 'client',
+    fields: [
+      { k: 'client', label: 'Client or business name', type: 'text' }
     ]
   },
   prospect: {
@@ -969,7 +1221,7 @@ function renderPlaceholder(key) {
 }
 
 /* ─── Routing ───────────────────────────────────────────────────────────── */
-var LIVE_PAGES = { home: renderHome, tasks: renderTasks, clients: renderClients, prospects: renderProspects, content: renderContent };
+var LIVE_PAGES = { home: renderHome, tasks: renderTasks, clients: renderClients, prospects: renderProspects, content: renderContent, onboarding: renderOnboarding };
 
 function currentPage() {
   var h = (location.hash || '#/home').replace('#/', '');
@@ -1126,6 +1378,31 @@ document.getElementById('main').addEventListener('click', function (e) {
     render();
     return;
   }
+  if (e.target.closest && e.target.closest('[data-start-onb]')) { openForm('onboard', null); return; }
+  var onbStep = e.target.closest ? e.target.closest('[data-onb-step]') : null;
+  if (onbStep) {
+    var parts = onbStep.getAttribute('data-onb-step').split(':');
+    for (var oi = 0; oi < state.onboardings.length; oi++) {
+      if (state.onboardings[oi].id === parts[0]) {
+        var o = state.onboardings[oi];
+        if (!o.steps) o.steps = [];
+        o.steps[parseInt(parts[1], 10)] = !o.steps[parseInt(parts[1], 10)];
+        persistAndRender();
+        return;
+      }
+    }
+    return;
+  }
+  var onbEdit = e.target.closest ? e.target.closest('[data-onb-edit]') : null;
+  if (onbEdit) { openForm('onboard', onbEdit.getAttribute('data-onb-edit')); return; }
+  var pkCard = e.target.closest ? e.target.closest('[data-pk]') : null;
+  if (pkCard) {
+    var pk = pkCard.getAttribute('data-pk');
+    if (quoteSel[pk]) delete quoteSel[pk]; else quoteSel[pk] = true;
+    render();
+    return;
+  }
+  if (e.target.closest && e.target.closest('[data-quote-clear]')) { quoteSel = {}; render(); return; }
   if (e.target.closest && e.target.closest('[data-add-client]')) { openForm('client', null); return; }
   if (e.target.closest && e.target.closest('[data-add-prospect]')) { openForm('prospect', null); return; }
   if (e.target.closest && e.target.closest('[data-add-content]')) { openForm('content', null, { date: todayStr() }); return; }
