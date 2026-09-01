@@ -310,6 +310,7 @@ if (!state.clients) state.clients = [];
 if (!state.prospects) state.prospects = [];
 if (!state.content) state.content = [];
 if (!state.onboardings) state.onboardings = [];
+if (!state.selections) state.selections = [];
 saveState(state);
 
 /* ─── Helpers ───────────────────────────────────────────────────────────── */
@@ -909,13 +910,15 @@ function duoPct(separate) {
   return Math.max(10.7, Math.min(19.9, pct));
 }
 
-function customTotal() {
-  var v = videosPrice(customMix.videos);
-  var h = hoursPrice(customMix.hours);
+function customTotalFor(mix) {
+  var v = videosPrice(mix.videos || 0);
+  var h = hoursPrice(mix.hours || 0);
   var sep = v + h;
-  if (customMix.videos > 0 && customMix.hours > 0) return round5(sep * (1 - duoPct(sep) / 100));
+  if (mix.videos > 0 && mix.hours > 0) return round5(sep * (1 - duoPct(sep) / 100));
   return sep;
 }
+
+function customTotal() { return customTotalFor(customMix); }
 
 function customResultHtml() {
   var nv = customMix.videos, nh = customMix.hours;
@@ -1103,8 +1106,53 @@ function renderOnboarding() {
     quoteBar = '<div style="position:fixed;bottom:22px;right:26px;z-index:40;background:#6E5B44;color:#F7F3EC;border-radius:10px;padding:12px 18px;max-width:340px;">' +
       '<div style="font-size:14px;font-weight:bold;">' + selItems.length + ' selected — ' + parts.join(' + ') + '</div>' +
       '<div style="font-size:12px;margin-top:3px;">+ €150 onboarding fee' + (overFiveHundred ? ', credited back (over €500)' : '') + ' · standard list</div>' +
-      '<button data-quote-clear style="margin-top:8px;padding:4px 10px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #F7F3EC;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Clear selection</button>' +
-      '</div>';
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
+      '<button data-save-selection style="padding:4px 12px;font-family:Arial,sans-serif;font-size:12px;font-weight:bold;border:none;border-radius:6px;background:#B8DFFF;color:#453E33;cursor:pointer;">Save for a client</button>' +
+      '<button data-quote-clear style="padding:4px 10px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #F7F3EC;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Clear</button>' +
+      '</div></div>';
+  }
+
+  /* Saved per-client selections */
+  var selMap = {};
+  allQuoteItems().forEach(function (i) { selMap[i.k] = i; });
+  var savedBody;
+  if (state.selections.length === 0) {
+    savedBody = emptyLine('Pick packages, add-ons or a custom mix above, then “Save for a client” on the total — their pick keeps here for the proposal.');
+  } else {
+    savedBody = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">' +
+      state.selections.map(function (s) {
+        var once = 0, mo = 0, lines = [];
+        (s.items || []).forEach(function (k) {
+          var it = selMap[k];
+          if (!it) return;
+          if (it.per === 'mo') mo += it.price; else once += it.price;
+          lines.push('<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#5E564A;padding:2px 0;"><span>' + esc(it.name) + '</span><span>' + euro(it.price) + (it.per === 'mo' ? '/mo' : '') + '</span></div>');
+        });
+        var cm = s.custom || {};
+        if (cm.added && (cm.videos > 0 || cm.hours > 0)) {
+          var cmTotal = customTotalFor(cm);
+          once += cmTotal;
+          var cmBits = [];
+          if (cm.videos) cmBits.push(cm.videos + ' video' + (cm.videos === 1 ? '' : 's'));
+          if (cm.hours) cmBits.push(cm.hours + ' hrs ecommerce');
+          lines.push('<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#5E564A;padding:2px 0;"><span>Custom mix — ' + cmBits.join(' + ') + '</span><span>' + euro(cmTotal) + '</span></div>');
+        }
+        if (!lines.length) lines.push('<div style="font-size:12px;color:#857A69;padding:2px 0;">Nothing picked yet.</div>');
+        var parts2 = [];
+        if (once) parts2.push(euro(once) + ' once-off');
+        if (mo) parts2.push(euro(mo) + '/mo');
+        return '<div data-selcard="' + esc(s.id) + '" style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:10px;padding:14px 16px;cursor:pointer;">' +
+          '<div style="display:flex;align-items:baseline;gap:10px;">' +
+          '<span style="flex:1;font-family:Georgia,serif;font-size:16px;color:#453E33;">' + esc(s.client) + '</span>' +
+          (s.savedAt ? '<span style="color:#857A69;font-size:12px;">saved ' + fmtDate(s.savedAt) + '</span>' : '') + '</div>' +
+          '<div style="margin:8px 0 6px;border-top:1px solid #DDD3C4;padding-top:6px;">' + lines.join('') + '</div>' +
+          '<div style="display:flex;align-items:center;gap:10px;">' +
+          '<span style="flex:1;font-size:13px;font-weight:bold;color:#453E33;">' + (parts2.length ? parts2.join(' + ') : '—') + '</span>' +
+          '<button data-sel-load="' + esc(s.id) + '" style="padding:4px 12px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Open in the picker</button>' +
+          '</div>' +
+          (s.notes ? '<div style="color:#857A69;font-size:12px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(s.notes) + '</div>' : '') +
+          '</div>';
+      }).join('') + '</div>';
   }
 
   /* Paperwork */
@@ -1147,6 +1195,7 @@ function renderOnboarding() {
       '<div style="margin-top:18px;padding-top:12px;border-top:1px solid #C4B8A8;"><h3 style="font-family:Georgia,serif;font-weight:normal;font-size:16px;color:#453E33;">Add-ons</h3>' + addonChips + '</div>' +
       customCalcHtml(),
       'Standard list prices — click to pick and choose; the total builds itself. Small business and friends &amp; family rates exist and get applied by Elva, case by case.') +
+    sectionCard('What each client wants', savedBody, 'Each client’s pick, saved from the picker — open it back up to tweak, and re-save under the same name to update it.') +
     sectionCard('What they sign and get', '<div style="margin-top:6px;">' + papers + '</div>', 'Templates live in the studio Drive — this is what each one has to cover.') +
     sectionCard('Standing terms', terms) +
     quoteBar;
@@ -1179,6 +1228,13 @@ var FORM_SPECS = {
     titleNew: 'Start an onboarding', titleEdit: 'Edit onboarding', store: 'onboardings', required: 'client',
     fields: [
       { k: 'client', label: 'Client or business name', type: 'text' }
+    ]
+  },
+  selection: {
+    titleNew: 'Save this selection for a client', titleEdit: 'Edit saved selection', store: 'selections', required: 'client',
+    fields: [
+      { k: 'client', label: 'Client or business name — saving under an existing name replaces their pick', type: 'text' },
+      { k: 'notes', label: 'Notes', type: 'textarea' }
     ]
   },
   prospect: {
@@ -1283,6 +1339,22 @@ document.getElementById('g-save').addEventListener('click', function () {
     var req = document.querySelector('#g-body [data-f="' + spec.required + '"]');
     if (req) { req.style.borderColor = '#A85560'; req.focus(); }
     return;
+  }
+  /* Saving a selection snapshots the current picker; same client name = update */
+  if (gForm.type === 'selection' && !gForm.id) {
+    values.items = Object.keys(quoteSel);
+    values.custom = { videos: customMix.videos, hours: customMix.hours, added: customMix.added };
+    values.savedAt = todayStr();
+    var match = null;
+    for (var m = 0; m < state.selections.length; m++) {
+      if (state.selections[m].client.toLowerCase() === values.client.toLowerCase()) match = state.selections[m];
+    }
+    if (match) {
+      Object.assign(match, values);
+      closeForm();
+      persistAndRender();
+      return;
+    }
   }
   var arr = state[spec.store];
   if (gForm.id) {
@@ -1522,6 +1594,24 @@ document.getElementById('main').addEventListener('click', function (e) {
     render();
     return;
   }
+  if (e.target.closest && e.target.closest('[data-save-selection]')) { openForm('selection', null); return; }
+  var selLoad = e.target.closest ? e.target.closest('[data-sel-load]') : null;
+  if (selLoad) {
+    for (var si = 0; si < state.selections.length; si++) {
+      if (state.selections[si].id === selLoad.getAttribute('data-sel-load')) {
+        var sSel = state.selections[si];
+        quoteSel = {};
+        (sSel.items || []).forEach(function (k) { quoteSel[k] = true; });
+        var cmm = sSel.custom || {};
+        customMix = { videos: cmm.videos || 0, hours: cmm.hours || 0, added: !!cmm.added };
+        render();
+        return;
+      }
+    }
+    return;
+  }
+  var selCard = e.target.closest ? e.target.closest('[data-selcard]') : null;
+  if (selCard) { openForm('selection', selCard.getAttribute('data-selcard')); return; }
   if (e.target.closest && e.target.closest('[data-quote-clear]')) {
     quoteSel = {};
     customMix.added = false;
