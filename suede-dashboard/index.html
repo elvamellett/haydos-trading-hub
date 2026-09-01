@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <title>The Suede Studio</title>
 <style>
 /* Static shell styling only. Everything rendered by JavaScript carries inline
@@ -675,7 +676,8 @@ function renderClients() {
     if (c.website) links.push(extLink(c.website, 'Website'));
     if (c.instagram) links.push(extLink(/^@/.test(c.instagram) ? 'instagram.com/' + c.instagram.slice(1) : c.instagram, 'Instagram'));
     if (c.driveLink) links.push(extLink(c.driveLink, 'Drive folder'));
-    if (links.length) lines.push('<div style="display:flex;gap:14px;margin-top:8px;">' + links.join('') + '</div>');
+    links.push('<button data-dl-clientfile="' + esc(c.business) + '" style="padding:1px 10px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Download client file</button>');
+    lines.push('<div style="display:flex;align-items:center;gap:14px;margin-top:8px;">' + links.join('') + '</div>');
     if (c.notes) lines.push('<div style="color:#857A69;font-size:12px;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(c.notes) + '</div>');
 
     return '<div data-client="' + esc(c.id) + '" style="background:#EBE4D9;border:1px solid #DDD3C4;border-radius:10px;padding:16px 18px;cursor:pointer;' + (dormant ? 'opacity:0.65;' : '') + '">' +
@@ -1017,13 +1019,20 @@ function renderOnboarding() {
             '<span style="font-size:13px;color:' + (ticked ? '#857A69' : '#453E33') + ';">' + s[0] + '</span>' +
             '</div>';
         }).join('');
+        var hasClient = state.clients.some(function (c) { return norm(c.business) === norm(o.client); });
+        var actions = '<div style="display:flex;gap:8px;margin-top:10px;padding-top:8px;border-top:1px solid #DDD3C4;">' +
+          (hasClient
+            ? '<span style="font-size:12px;color:#857A69;align-self:center;">In Clients ✓</span>'
+            : '<button data-onb-makeclient="' + esc(o.id) + '" style="padding:5px 12px;font-family:Arial,sans-serif;font-size:12px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">Set up as client</button>') +
+          '<button data-dl-clientfile="' + esc(o.client) + '" style="padding:5px 12px;font-family:Arial,sans-serif;font-size:12px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Download client file</button>' +
+          '</div>';
         return '<div style="background:#F7F3EC;border:1px solid #DDD3C4;border-radius:10px;padding:14px 16px;">' +
           '<div data-onb-edit="' + esc(o.id) + '" style="display:flex;align-items:center;gap:10px;cursor:pointer;">' +
           '<span style="flex:1;font-family:Georgia,serif;font-size:16px;color:#453E33;">' + esc(o.client) + '</span>' +
           '<span style="color:#857A69;font-size:12px;">' + done + ' of ' + ONBOARD_STEPS.length + '</span>' +
           '</div>' +
           '<div style="height:5px;border-radius:3px;background:#DDD3C4;overflow:hidden;margin:8px 0 10px;"><div style="width:' + pct + '%;height:5px;background:#B8DFFF;"></div></div>' +
-          rows + '</div>';
+          rows + actions + '</div>';
       }).join('') + '</div>';
   }
   var runnersHead =
@@ -1198,7 +1207,313 @@ function renderOnboarding() {
     sectionCard('What each client wants', savedBody, 'Each client’s pick, saved from the picker — open it back up to tweak, and re-save under the same name to update it.') +
     sectionCard('What they sign and get', '<div style="margin-top:6px;">' + papers + '</div>', 'Templates live in the studio Drive — this is what each one has to cover.') +
     sectionCard('Standing terms', terms) +
+    sectionCard('Download the pack',
+      '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">' +
+      '<button data-dl-deck="pack" style="padding:8px 16px;font-family:Arial,sans-serif;font-size:13px;border:none;border-radius:6px;background:#6E5B44;color:#F7F3EC;cursor:pointer;">The full onboarding pack</button>' +
+      '<button data-dl-deck="who" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Who we are</button>' +
+      '<button data-dl-deck="process" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">The process</button>' +
+      '<button data-dl-deck="packages" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">Packages &amp; pricing</button>' +
+      '<button data-dl-deck="paperwork" style="padding:8px 14px;font-family:Arial,sans-serif;font-size:13px;border:1px solid #C4B8A8;border-radius:6px;background:#F7F3EC;color:#5E564A;cursor:pointer;">The paperwork</button>' +
+      '</div>',
+      'PDFs in the studio look, ready to send to a client — the whole pack in one, or piece by piece.') +
     quoteBar;
+}
+
+/* ─── Downloads: branded PDFs (HTML fallback when jsPDF can't load) ─────── */
+function norm(s) { return String(s || '').trim().toLowerCase(); }
+
+function docToPdf(blocks) {
+  if (!window.jspdf || !window.jspdf.jsPDF) return null;
+  var doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+  var W = 595.28, M = 56, y = 0, page = 1;
+  function header() {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(133, 122, 105); doc.setCharSpace(2);
+    doc.text('THE SUEDE STUDIO', M, 40);
+    doc.setCharSpace(0);
+    doc.setDrawColor(196, 184, 168); doc.setLineWidth(0.7); doc.line(M, 48, W - M, 48);
+    y = 76;
+  }
+  function foot() {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(133, 122, 105);
+    doc.text('thesuedestudio.com · @the.suede.studio', M, 812);
+    doc.text(String(page), W - M, 812, { align: 'right' });
+  }
+  function newPage() { foot(); doc.addPage(); page++; header(); }
+  function need(h) { if (y + h > 786) newPage(); }
+  header();
+  blocks.forEach(function (b) {
+    if (b.t === 'pagebreak') { newPage(); return; }
+    if (b.t === 'gap') { y += 10; return; }
+    if (b.t === 'h1') {
+      need(44); doc.setFont('times', 'normal'); doc.setFontSize(23); doc.setTextColor(69, 62, 51);
+      doc.text(b.x, M, y + 23); y += 38; return;
+    }
+    if (b.t === 'h2') {
+      need(40); y += 12; doc.setFont('times', 'normal'); doc.setFontSize(15); doc.setTextColor(69, 62, 51);
+      doc.text(b.x, M, y + 15); y += 22;
+      doc.setDrawColor(221, 211, 196); doc.setLineWidth(0.6); doc.line(M, y, W - M, y); y += 10; return;
+    }
+    if (b.t === 'row') {
+      need(18); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(69, 62, 51);
+      doc.text(b.k, M, y + 10);
+      if (b.v) { doc.setFont('helvetica', 'normal'); doc.text(b.v, W - M, y + 10, { align: 'right' }); }
+      y += 14;
+      if (b.d) {
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(133, 122, 105);
+        var dl = doc.splitTextToSize(b.d, W - 2 * M - 40);
+        need(dl.length * 11 + 4); doc.text(dl, M, y + 9); y += dl.length * 11 + 5;
+      } else { y += 3; }
+      return;
+    }
+    if (b.t === 'kv') {
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+      var kl = doc.splitTextToSize(String(b.v), W - 2 * M - 140);
+      need(Math.max(1, kl.length) * 13 + 4);
+      doc.setFont('helvetica', 'bold'); doc.setTextColor(94, 86, 74); doc.text(b.k, M, y + 10);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(69, 62, 51); doc.text(kl, M + 140, y + 10);
+      y += Math.max(1, kl.length) * 13 + 4; return;
+    }
+    /* p / li / note */
+    var size = b.t === 'note' ? 9 : 10.5;
+    var col = b.t === 'note' ? [133, 122, 105] : [69, 62, 51];
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(size); doc.setTextColor(col[0], col[1], col[2]);
+    var prefix = b.t === 'li' ? '•  ' : '';
+    var lines = doc.splitTextToSize(prefix + b.x, W - 2 * M - (b.t === 'li' ? 8 : 0));
+    need(lines.length * 13 + 4);
+    doc.text(lines, M + (b.t === 'li' ? 6 : 0), y + 11);
+    y += lines.length * 13 + (b.t === 'note' ? 4 : 6);
+  });
+  foot();
+  return doc.output('blob');
+}
+
+function docToHtml(blocks, title) {
+  var out = ['<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + esc(title) + '</title></head>' +
+    '<body style="font-family:Arial,sans-serif;color:#453E33;background:#F7F3EC;margin:0;padding:40px 20px;">' +
+    '<div style="max-width:640px;margin:0 auto;background:#F7F3EC;">' +
+    '<div style="font-size:11px;letter-spacing:2px;color:#857A69;font-weight:bold;">THE SUEDE STUDIO</div>' +
+    '<hr style="border:none;border-top:1px solid #C4B8A8;margin:10px 0 24px;">'];
+  blocks.forEach(function (b) {
+    if (b.t === 'h1') out.push('<h1 style="font-family:Georgia,serif;font-weight:normal;font-size:28px;margin:8px 0;">' + esc(b.x) + '</h1>');
+    else if (b.t === 'h2') out.push('<h2 style="font-family:Georgia,serif;font-weight:normal;font-size:19px;margin:22px 0 6px;padding-bottom:6px;border-bottom:1px solid #DDD3C4;">' + esc(b.x) + '</h2>');
+    else if (b.t === 'p') out.push('<p style="font-size:14px;margin:8px 0;">' + esc(b.x) + '</p>');
+    else if (b.t === 'note') out.push('<p style="font-size:12px;color:#857A69;margin:6px 0;">' + esc(b.x) + '</p>');
+    else if (b.t === 'li') out.push('<p style="font-size:14px;margin:5px 0 5px 16px;">• ' + esc(b.x) + '</p>');
+    else if (b.t === 'kv') out.push('<p style="font-size:13px;margin:5px 0;"><b style="color:#5E564A;">' + esc(b.k) + ':</b> ' + esc(b.v) + '</p>');
+    else if (b.t === 'row') out.push('<div style="display:flex;justify-content:space-between;gap:12px;font-size:13px;margin:6px 0 2px;"><b>' + esc(b.k) + '</b><span>' + esc(b.v || '') + '</span></div>' + (b.d ? '<p style="font-size:12px;color:#857A69;margin:0 0 6px;">' + esc(b.d) + '</p>' : ''));
+    else if (b.t === 'pagebreak') out.push('<hr style="border:none;border-top:1px solid #C4B8A8;margin:30px 0;">');
+  });
+  out.push('</div></body></html>');
+  return out.join('');
+}
+
+function fallbackDownload(filename, data) {
+  try {
+    var blob = data instanceof Blob ? data : new Blob([data], { type: /\.html$/.test(filename) ? 'text/html' : 'application/pdf' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  } catch (e) {}
+}
+
+/* In the claude.ai artifact viewer, downloads go through the runtime's save
+   prompt; everywhere else (GitHub Pages, a local file) a plain browser
+   download does the job. */
+function saveFile(filename, data) {
+  var cap = Promise.resolve(null);
+  if (window.claude && typeof window.claude.use === 'function') {
+    cap = window.claude.use('downloads').catch(function () { return null; });
+  }
+  cap.then(function (dl) {
+    if (dl) {
+      dl.save({ filename: filename, data: data }).catch(function (err) {
+        if (err && (err.code === 'declined' || err.code === 'rate_limited')) return;
+        fallbackDownload(filename, data);
+      });
+      return;
+    }
+    fallbackDownload(filename, data);
+  });
+}
+
+function downloadDoc(name, blocks) {
+  /* Chromium drops non-ASCII suggested filenames, so keep them plain */
+  var fname = name.replace(/[—–]/g, '-').replace(/[^A-Za-z0-9 ._()-]/g, '').replace(/\s+/g, ' ').trim();
+  var pdf = docToPdf(blocks);
+  if (pdf) saveFile(fname + '.pdf', pdf);
+  else saveFile(fname + '.html', docToHtml(blocks, name));
+}
+
+/* ─── The deck contents ─────────────────────────────────────────────────── */
+function docWho() {
+  return [
+    { t: 'h1', x: 'Who we are' },
+    { t: 'p', x: 'The Suede Studio is a two-person studio in Wicklow: content and ecommerce, done properly, handed over ready to run.' },
+    { t: 'kv', k: 'Website', v: 'thesuedestudio.com' },
+    { t: 'kv', k: 'Instagram', v: '@the.suede.studio' },
+    { t: 'h2', x: 'What we do' },
+    { t: 'li', x: 'Elva — the ecommerce lane: Shopify, SEO, brand, website builds, Klaviyo. She logs in, fixes, polishes and builds.' },
+    { t: 'li', x: 'Laura — the content lane: planning, shooting and editing social content, handed over with advice on how to post it.' },
+    { t: 'li', x: 'The Duo — both lanes together, at a saving.' },
+    { t: 'h2', x: 'How we work — we build it, you run it' },
+    { t: 'p', x: 'We build, fix, shoot and edit. We don’t fulfil orders, chase customers or answer customer-service email; we don’t press post, run live stories, or answer DMs and comments — you publish, and we make publishing easy. PR and influencer outreach are a separate conversation.' }
+  ];
+}
+
+function docProcess() {
+  var out = [
+    { t: 'h1', x: 'How onboarding works' },
+    { t: 'p', x: 'Every new client walks the same road, start to finish — whatever the lane.' }
+  ];
+  ONBOARD_STEPS.forEach(function (s, i) {
+    out.push({ t: 'h2', x: (i + 1) + '. ' + s[0] });
+    out.push({ t: 'p', x: s[1] });
+  });
+  return out;
+}
+
+function docPackages() {
+  var out = [
+    { t: 'h1', x: 'Packages and pricing' },
+    { t: 'note', x: 'Standard list, in euro. Every job carries a €150 onboarding fee, credited back against any package over €500.' }
+  ];
+  PKG_LANES.forEach(function (lane) {
+    out.push({ t: 'h2', x: lane.lane });
+    lane.items.forEach(function (it) {
+      out.push({ t: 'row', k: it.name, v: euro(it.price) + (it.per === 'mo' ? '/month' : ''), d: it.desc });
+    });
+    out.push({ t: 'note', x: lane.note });
+  });
+  out.push({ t: 'h2', x: 'Add-ons' });
+  ['Content', 'Ecommerce'].forEach(function (g) {
+    ADDONS.filter(function (a) { return a.group === g; }).forEach(function (a) {
+      out.push({ t: 'row', k: a.name + '  (' + g.toLowerCase() + ')', v: euro(a.price) });
+    });
+  });
+  out.push({ t: 'h2', x: 'The terms' });
+  out.push({ t: 'li', x: '50% deposit up front, 50% on completion.' });
+  out.push({ t: 'li', x: 'Retainers billed monthly in advance.' });
+  out.push({ t: 'li', x: '€150 onboarding fee, credited back against any package over €500.' });
+  out.push({ t: 'li', x: 'Retainer clients get a one-hour review and planning call each month.' });
+  out.push({ t: 'li', x: 'Turnaround subject to availability — the work happens evenings and weekends.' });
+  return out;
+}
+
+function docPaperwork() {
+  var out = [
+    { t: 'h1', x: 'What you sign and get' },
+    { t: 'p', x: 'Six pieces of paper, none of them scary.' }
+  ];
+  [
+    ['The proposal', 'Your three options with the maths shown line by line.'],
+    ['The service agreement', 'Scope (we build it, you run it), deliverables, revision rounds, payment terms, and who owns the work.'],
+    ['The deposit invoice', '50% up front, balance on completion. Retainers: first month billed in advance.'],
+    ['The onboarding fee', '€150 on every job, credited back against any package over €500.'],
+    ['The Production Brief', 'The form that gathers brand assets, logins, product info and sign-off names before any work starts.'],
+    ['The handover note', 'What was delivered, logins returned, and how to run it from here.']
+  ].forEach(function (d) { out.push({ t: 'row', k: d[0], v: '', d: d[1] }); });
+  return out;
+}
+
+function docPack() {
+  return docWho()
+    .concat([{ t: 'pagebreak' }], docProcess())
+    .concat([{ t: 'pagebreak' }], docPackages())
+    .concat([{ t: 'pagebreak' }], docPaperwork());
+}
+
+/* ─── The client file: everything gathered for one business ─────────────── */
+function docClientFile(businessName) {
+  var n = norm(businessName);
+  var out = [
+    { t: 'h1', x: businessName + ' — client file' },
+    { t: 'note', x: 'Everything the dashboard holds on them · exported ' + fmtDate(todayStr()) }
+  ];
+
+  var c = null;
+  state.clients.forEach(function (x) { if (norm(x.business) === n) c = x; });
+  if (c) {
+    out.push({ t: 'h2', x: 'Details' });
+    [['Stage', c.stage], ['Lane', c.lane], ['Package', c.package],
+     ['Contact', c.contact], ['Email', c.email], ['Phone', c.phone],
+     ['Website', c.website], ['Instagram', c.instagram],
+     ['Retainer', c.retainer ? 'Yes' : ''],
+     ['Monthly hours', c.monthlyHours], ['Pieces a month', c.monthlyPieces],
+     ['Bills on day', c.billingDay], ['Started', c.startDate ? fmtDate(c.startDate) : ''],
+     ['Drive folder', c.driveLink]
+    ].forEach(function (kv) { if (kv[1]) out.push({ t: 'kv', k: kv[0], v: kv[1] }); });
+    if (c.notes) { out.push({ t: 'h2', x: 'Notes and Production Brief' }); out.push({ t: 'p', x: c.notes }); }
+  }
+
+  var sel = null;
+  state.selections.forEach(function (x) { if (norm(x.client) === n) sel = x; });
+  if (sel) {
+    out.push({ t: 'h2', x: 'Their pick' });
+    var selMap = {};
+    allQuoteItems().forEach(function (i) { selMap[i.k] = i; });
+    var once = 0, mo = 0;
+    (sel.items || []).forEach(function (k) {
+      var it = selMap[k];
+      if (!it) return;
+      if (it.per === 'mo') mo += it.price; else once += it.price;
+      out.push({ t: 'row', k: it.name, v: euro(it.price) + (it.per === 'mo' ? '/month' : '') });
+    });
+    var cm = sel.custom || {};
+    if (cm.added && (cm.videos > 0 || cm.hours > 0)) {
+      var cmTotal = customTotalFor(cm);
+      once += cmTotal;
+      out.push({ t: 'row', k: 'Custom mix — ' + (cm.videos || 0) + ' videos + ' + (cm.hours || 0) + ' hrs ecommerce', v: euro(cmTotal) });
+    }
+    var parts = [];
+    if (once) parts.push(euro(once) + ' once-off');
+    if (mo) parts.push(euro(mo) + ' a month');
+    if (parts.length) out.push({ t: 'row', k: 'Total', v: parts.join(' + ') });
+    if (sel.notes) out.push({ t: 'note', x: sel.notes });
+  }
+
+  var p = null;
+  state.prospects.forEach(function (x) { if (norm(x.business) === n || norm(x.name) === n) p = x; });
+  if (p) {
+    out.push({ t: 'h2', x: 'Pipeline history' });
+    [['Contact', p.name], ['Status', p.status], ['Channel', p.channel],
+     ['Last contact', p.lastContact ? fmtDate(p.lastContact) : ''], ['Next action', p.nextAction]
+    ].forEach(function (kv) { if (kv[1]) out.push({ t: 'kv', k: kv[0], v: kv[1] }); });
+    if (p.notes) out.push({ t: 'p', x: p.notes });
+  }
+
+  var ob = null;
+  state.onboardings.forEach(function (x) { if (norm(x.client) === n) ob = x; });
+  if (ob) {
+    var steps = ob.steps || [], done = 0;
+    for (var i = 0; i < ONBOARD_STEPS.length; i++) if (steps[i]) done++;
+    out.push({ t: 'h2', x: 'Onboarding — ' + done + ' of ' + ONBOARD_STEPS.length + ' steps done' });
+    ONBOARD_STEPS.forEach(function (s, j) {
+      out.push({ t: 'li', x: (steps[j] ? '[done] ' : '[  ] ') + s[0] });
+    });
+  }
+
+  var tasks = state.tasks.filter(function (t) { return norm(t.client) === n; });
+  if (tasks.length) {
+    out.push({ t: 'h2', x: 'Tasks' });
+    tasks.forEach(function (t) {
+      out.push({ t: 'li', x: t.title + ' — ' + t.owner + (t.status === 'done' ? ', done' + (t.doneDate ? ' ' + fmtDate(t.doneDate) : '') : (t.due ? ', due ' + fmtDate(t.due) : '')) });
+    });
+  }
+
+  var entries = state.content.filter(function (e) { return norm(e.client) === n; });
+  if (entries.length) {
+    out.push({ t: 'h2', x: 'Content calendar' });
+    entries.sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (e) {
+      out.push({ t: 'li', x: fmtDate(e.date) + ' — ' + (e.format || 'post') + (e.platform ? ' on ' + e.platform : '') + (e.status ? ' · ' + e.status : '') + (e.link ? ' · link attached' : '') });
+    });
+  }
+
+  if (!c && !sel && !p && !ob && !tasks.length && !entries.length) {
+    out.push({ t: 'p', x: 'Nothing recorded for this name yet.' });
+  }
+  return out;
 }
 
 /* ─── Generic record forms ──────────────────────────────────────────────── */
@@ -1578,6 +1893,44 @@ document.getElementById('main').addEventListener('click', function (e) {
         return;
       }
     }
+    return;
+  }
+  var makeClient = e.target.closest ? e.target.closest('[data-onb-makeclient]') : null;
+  if (makeClient) {
+    for (var mi = 0; mi < state.onboardings.length; mi++) {
+      if (state.onboardings[mi].id === makeClient.getAttribute('data-onb-makeclient')) {
+        var ob = state.onboardings[mi];
+        if (!state.clients.some(function (c) { return norm(c.business) === norm(ob.client); })) {
+          var fromProspect = null;
+          state.prospects.forEach(function (x) { if (norm(x.business) === norm(ob.client) || norm(x.name) === norm(ob.client)) fromProspect = x; });
+          state.clients.push({
+            id: 'client-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+            business: ob.client,
+            contact: fromProspect ? fromProspect.name : '',
+            stage: 'Onboarding',
+            notes: fromProspect && fromProspect.notes ? fromProspect.notes : ''
+          });
+          persistAndRender();
+        }
+        return;
+      }
+    }
+    return;
+  }
+  var dlClient = e.target.closest ? e.target.closest('[data-dl-clientfile]') : null;
+  if (dlClient) {
+    var biz = dlClient.getAttribute('data-dl-clientfile');
+    downloadDoc(biz + ' — client file', docClientFile(biz));
+    return;
+  }
+  var dlDeck = e.target.closest ? e.target.closest('[data-dl-deck]') : null;
+  if (dlDeck) {
+    var which = dlDeck.getAttribute('data-dl-deck');
+    if (which === 'who') downloadDoc('The Suede Studio — who we are', docWho());
+    else if (which === 'process') downloadDoc('The Suede Studio — how onboarding works', docProcess());
+    else if (which === 'packages') downloadDoc('The Suede Studio — packages and pricing', docPackages());
+    else if (which === 'paperwork') downloadDoc('The Suede Studio — what you sign and get', docPaperwork());
+    else downloadDoc('The Suede Studio — onboarding pack', docPack());
     return;
   }
   var onbEdit = e.target.closest ? e.target.closest('[data-onb-edit]') : null;
